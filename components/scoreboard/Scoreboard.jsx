@@ -73,6 +73,10 @@ export function Scoreboard() {
           .eq('id', user.id)
           .single();
         if (data) {
+          if (data.role === 'player') {
+            router.replace('/player');
+            return;
+          }
           setProfile(data);
         }
       } catch {

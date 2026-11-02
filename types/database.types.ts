@@ -15,6 +15,8 @@ export type Database = {
           full_name: string | null;
           role: 'referee' | 'player' | null;
           avatar_url: string | null;
+          experience: 'beginner' | 'novice' | 'intermediate' | 'expert' | null;
+          photo_urls: Json;
           created_at: string;
           last_active_at: string | null;
         };
@@ -23,6 +25,8 @@ export type Database = {
           full_name?: string | null;
           role?: 'referee' | 'player' | null;
           avatar_url?: string | null;
+          experience?: 'beginner' | 'novice' | 'intermediate' | 'expert' | null;
+          photo_urls?: Json;
           created_at?: string;
           last_active_at?: string | null;
         };
@@ -31,6 +35,8 @@ export type Database = {
           full_name?: string | null;
           role?: 'referee' | 'player' | null;
           avatar_url?: string | null;
+          experience?: 'beginner' | 'novice' | 'intermediate' | 'expert' | null;
+          photo_urls?: Json;
           created_at?: string;
           last_active_at?: string | null;
         };

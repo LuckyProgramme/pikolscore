@@ -71,7 +71,7 @@ export default function MatchesPage() {
         if (!isMounted) return;
 
         if (!session?.user) {
-          router.replace('/auth/login');
+          router.replace('/umpire');
           return;
         }
 
@@ -85,13 +85,18 @@ export default function MatchesPage() {
           .eq('id', currentUser.id)
           .single();
 
+        if (profileData?.role === 'player') {
+          router.replace('/player');
+          return;
+        }
+
         if (isMounted) {
           if (profileData) setProfile(profileData);
           setIsAuthLoading(false);
         }
       } catch (err) {
         console.error('[MatchesPage] Auth check error:', err);
-        if (isMounted) router.replace('/auth/login');
+        if (isMounted) router.replace('/umpire');
       }
     }
 

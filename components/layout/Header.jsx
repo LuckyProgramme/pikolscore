@@ -31,7 +31,7 @@ export function Header({
         event.key?.startsWith('sb-') && event.key?.endsWith('-auth-token');
 
       if (isSupabaseToken && event.newValue === null) {
-        window.location.replace('/auth/login');
+        window.location.replace('/umpire');
       }
     };
 
@@ -54,7 +54,7 @@ export function Header({
           console.error('onLogout callback error:', e);
         }
       }
-      window.location.replace('/auth/login');
+      window.location.replace('/umpire');
       return;
     }
 
@@ -86,7 +86,7 @@ export function Header({
       // Remove active sb-<project>-auth-token from localStorage
       detachActiveSupabaseSession();
       // Hard redirect to wipe in-memory Supabase client state
-      window.location.replace('/auth/login');
+      window.location.replace('/umpire');
     }
   };
 

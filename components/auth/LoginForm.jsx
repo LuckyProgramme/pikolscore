@@ -128,13 +128,22 @@ export function LoginForm({ initialMode = 'signin' }) {
         .update({ last_active_at: new Date().toISOString() })
         .eq('id', userId)
         .gte('last_active_at', cutoffIso)
-        .select('id')
+        .select('id, role')
         .maybeSingle();
 
       if (profileErr || !updatedProfile) {
         // Officially terminate the stale session via Supabase Auth API
         await supabase.auth.signOut();
         handleExpiredFallback(account);
+        return;
+      }
+
+      if (updatedProfile.role === 'player') {
+        await supabase.auth.signOut();
+        handleExpiredFallback(account);
+        setPasswordError(
+          'This account is registered as a Player. Please sign in through the Player Portal.'
+        );
         return;
       }
 
@@ -184,7 +193,7 @@ export function LoginForm({ initialMode = 'signin' }) {
 
     try {
       const { error } = await supabase.auth.resetPasswordForEmail(trimmedEmail, {
-        redirectTo: `${window.location.origin}/login`,
+        redirectTo: `${window.location.origin}/umpire`,
       });
       if (error) {
         setEmailError(
@@ -254,7 +263,9 @@ export function LoginForm({ initialMode = 'signin' }) {
           options: {
             data: {
               full_name: trimmedName,
+              role: 'referee',
             },
+            emailRedirectTo: `${window.location.origin}/umpire`,
           },
         });
 
@@ -305,6 +316,22 @@ export function LoginForm({ initialMode = 'signin' }) {
       }
 
       if (data?.session?.user) {
+        // Enforce role isolation: player accounts cannot sign into umpire console
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('role')
+          .eq('id', data.session.user.id)
+          .maybeSingle();
+
+        if (profile?.role === 'player') {
+          await supabase.auth.signOut();
+          setPasswordError(
+            'This account is registered as a Player. Please sign in through the Player Portal.'
+          );
+          setIsLoading(false);
+          return;
+        }
+
         try {
           await supabase
             .from('profiles')
@@ -327,20 +354,25 @@ export function LoginForm({ initialMode = 'signin' }) {
 
   return (
     <section className="relative flex flex-col items-center bg-pale-sage px-8 pt-10 pb-10">
-      <Link
-        href="/"
-        aria-label="PikolScore home"
-        className="mb-6 ml-6 flex items-center gap-3 self-start text-[26px] font-bold tracking-[-0.01em] text-dark-teal no-underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal"
-      >
-        <svg width="40" height="40" viewBox="0 0 40 40" aria-hidden="true">
-          <rect width="40" height="40" rx="12" fill="#0F5C62" />
-          <circle cx="20" cy="20" r="10" fill="#FEECD6" />
-          <circle cx="16.5" cy="16.5" r="1.6" fill="#084B46" />
-          <circle cx="23.5" cy="19" r="1.6" fill="#084B46" />
-          <circle cx="19" cy="24" r="1.6" fill="#084B46" />
-        </svg>
-        {AUTH_CONTENT.brand}
-      </Link>
+      <div className="mb-6 ml-6 flex items-center justify-between self-start w-[calc(100%-1.5rem)]">
+        <Link
+          href="/"
+          aria-label="PikolScore home"
+          className="flex items-center gap-3 text-[26px] font-bold tracking-[-0.01em] text-dark-teal no-underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal"
+        >
+          <svg width="40" height="40" viewBox="0 0 40 40" aria-hidden="true">
+            <rect width="40" height="40" rx="12" fill="#0F5C62" />
+            <circle cx="20" cy="20" r="10" fill="#FEECD6" />
+            <circle cx="16.5" cy="16.5" r="1.6" fill="#084B46" />
+            <circle cx="23.5" cy="19" r="1.6" fill="#084B46" />
+            <circle cx="19" cy="24" r="1.6" fill="#084B46" />
+          </svg>
+          {AUTH_CONTENT.brand}
+        </Link>
+        <span className="rounded-full bg-teal/10 px-3 py-1 text-[12px] font-semibold text-dark-teal border border-teal/20">
+          Umpire Console
+        </span>
+      </div>
 
       <form
         action="#"
@@ -710,7 +742,7 @@ export function LoginForm({ initialMode = 'signin' }) {
         <p className="mt-6 text-center text-[15px] text-deep-green">
           {copy.footerPrompt}
           <Link
-            href={isSignUp ? '/auth/login' : '/auth/signup'}
+            href="/umpire"
             onClick={(e) => {
               e.preventDefault();
               switchMode(isSignUp ? 'signin' : 'signup');
@@ -718,6 +750,16 @@ export function LoginForm({ initialMode = 'signin' }) {
             className="font-semibold text-teal no-underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal"
           >
             {copy.footerLink}
+          </Link>
+        </p>
+
+        <p className="mt-3 text-center text-[13px] text-muted">
+          Are you a player?{' '}
+          <Link
+            href="/player"
+            className="font-semibold text-teal no-underline hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal"
+          >
+            Sign in to player portal
           </Link>
         </p>
       </form>

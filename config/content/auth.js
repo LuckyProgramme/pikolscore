@@ -18,7 +18,7 @@ export const AUTH_CONTENT = {
 
   signUp: {
     heading: 'Sign Up',
-    subtitle: 'Register to score and manage matches',
+    subtitle: 'Register as an umpire to score and manage matches',
     submit: 'Sign up',
     submitting: 'Creating account...',
     footerPrompt: 'Already have an account? ',
@@ -27,7 +27,7 @@ export const AUTH_CONTENT = {
 
   fields: {
     fullName: {
-      label: 'Official / Player Name',
+      label: 'Official Name',
       placeholder: 'e.g. Alex Morgan',
     },
     email: {

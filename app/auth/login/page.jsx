@@ -1,9 +1,5 @@
-import AuthShell from '@/components/auth/AuthShell';
-
-export const metadata = {
-  title: 'PikolScore – Sign in',
-};
+import { redirect } from 'next/navigation';
 
 export default function AuthLoginPage() {
-  return <AuthShell initialMode="signin" />;
+  redirect('/umpire');
 }
