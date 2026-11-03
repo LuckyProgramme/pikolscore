@@ -150,6 +150,12 @@ export function Scoreboard() {
       sync.serverSession.umpire_id === userId
   );
 
+  const isQrModalOpen = Boolean(
+    qrModalExplicitOpen ||
+      (sync?.serverSession?.player_names?.lobbyLocked === false &&
+        (!isOwningUmpire || !umpireDismissedLobby))
+  );
+
   const handleTimerExpireRef = useRef(null);
   const isTransitioningMatchRef = useRef(false);
 
@@ -444,7 +450,7 @@ export function Scoreboard() {
 
       {/* 4. Main scoreboard & game controls put behind glass for guests */}
       <div
-        inert={isGuest || undefined}
+        inert={isGuest || isQrModalOpen || undefined}
         className={`flex-1 flex flex-col min-h-0 ${isGuest ? 'pointer-events-none select-none' : ''}`}
       >
         <main
@@ -549,29 +555,25 @@ export function Scoreboard() {
           onGoToMatches={handleGoToMatches}
           onClose={handleCloseGameWon}
         />
-
-        {/* 5. Court QR & Pre-Match Lobby Modal */}
-        {sync?.serverSession && (
-          <CourtQrLobbyModal
-            isOpen={Boolean(
-              qrModalExplicitOpen ||
-                (sync.serverSession.player_names?.lobbyLocked === false &&
-                  (!isOwningUmpire || !umpireDismissedLobby))
-            )}
-            onClose={() => {
-              setQrModalExplicitOpen(false);
-              setUmpireDismissedLobby(true);
-            }}
-            session={sync.serverSession}
-            currentUser={{ id: userId, email: userEmail }}
-            profile={profile}
-            isUmpire={isOwningUmpire}
-            onSessionUpdated={(updated) => {
-              sync.refetchAndRehydrate(updated);
-            }}
-          />
-        )}
       </div>
+
+      {/* 5. Court QR & Pre-Match Lobby Modal (rendered outside inert/pointer-events-none container) */}
+      {sync?.serverSession && (
+        <CourtQrLobbyModal
+          isOpen={isQrModalOpen}
+          onClose={() => {
+            setQrModalExplicitOpen(false);
+            setUmpireDismissedLobby(true);
+          }}
+          session={sync.serverSession}
+          currentUser={{ id: userId, email: userEmail }}
+          profile={profile}
+          isUmpire={isOwningUmpire}
+          onSessionUpdated={(updated) => {
+            sync.refetchAndRehydrate(updated);
+          }}
+        />
+      )}
     </div>
   );
 }
