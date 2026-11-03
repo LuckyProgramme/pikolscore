@@ -59,6 +59,7 @@ export function LoginForm({ initialMode = 'signin' }) {
   const [isSwitching, setIsSwitching] = useState(false);
   const [switchingUserId, setSwitchingUserId] = useState(null);
   const [sessionParam, setSessionParam] = useState(null);
+  const [courtParam, setCourtParam] = useState(null);
   const passwordInputRef = useRef(null);
 
   const [nameError, setNameError] = useState('');
@@ -74,8 +75,11 @@ export function LoginForm({ initialMode = 'signin' }) {
   useEffect(() => {
     let isMounted = true;
     const search = typeof window !== 'undefined' ? window.location.search : '';
-    const scannedSession = new URLSearchParams(search).get('session') || null;
+    const params = new URLSearchParams(search);
+    const scannedSession = params.get('session') || null;
+    const scannedCourt = params.get('court') || null;
     setSessionParam(scannedSession);
+    setCourtParam(scannedCourt);
     setSavedAccounts(getValidSavedAccounts());
 
     async function checkExistingSession() {
@@ -88,7 +92,7 @@ export function LoginForm({ initialMode = 'signin' }) {
         const dest = await resolveAuthenticatedDestination(
           supabase,
           session.user.id,
-          scannedSession
+          { sessionId: scannedSession, courtNumber: scannedCourt }
         );
         if (isMounted) router.replace(dest);
       } catch (err) {
@@ -181,7 +185,7 @@ export function LoginForm({ initialMode = 'signin' }) {
       const dest = await resolveAuthenticatedDestination(
         supabase,
         userId,
-        sessionParam
+        { sessionId: sessionParam, courtNumber: courtParam }
       );
       router.replace(dest);
     } catch (err) {
@@ -330,7 +334,7 @@ export function LoginForm({ initialMode = 'signin' }) {
             dest = await resolveAuthenticatedDestination(
               supabase,
               data.session.user.id,
-              sessionParam
+              { sessionId: sessionParam, courtNumber: courtParam }
             );
           }
           router.push(dest);
@@ -385,7 +389,7 @@ export function LoginForm({ initialMode = 'signin' }) {
         const dest = await resolveAuthenticatedDestination(
           supabase,
           data.session.user.id,
-          sessionParam
+          { sessionId: sessionParam, courtNumber: courtParam }
         );
         router.push(dest);
         return;
@@ -400,9 +404,10 @@ export function LoginForm({ initialMode = 'signin' }) {
     }
   };
 
-  const sessionSuffix = sessionParam
-    ? `?session=${encodeURIComponent(sessionParam)}`
-    : '';
+  const p = new URLSearchParams();
+  if (courtParam) p.set('court', courtParam);
+  if (sessionParam) p.set('session', sessionParam);
+  const sessionSuffix = p.toString() ? `?${p.toString()}` : '';
 
   return (
     <section className="relative flex flex-col items-center bg-pale-sage px-8 pt-10 pb-10">

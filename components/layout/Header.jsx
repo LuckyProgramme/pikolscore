@@ -18,6 +18,7 @@ export function Header({
   profile,
   userEmail,
   onLogout,
+  onAbandonMatch,
   isGuest = false,
   syncStatus = 'synced',
   pendingCount = 0,
@@ -186,6 +187,17 @@ export function Header({
           >
             <QrCode size={14} aria-hidden="true" />
             <span>Court QR</span>
+          </button>
+        )}
+
+        {onAbandonMatch && !isGuest && (
+          <button
+            type="button"
+            className="ps-pill text-[#BA1A1A] hover:bg-red-50 hover:border-red-300"
+            onClick={onAbandonMatch}
+            title="Abandon this match and free the court"
+          >
+            Abandon Match
           </button>
         )}
 

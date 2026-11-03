@@ -5,8 +5,6 @@ import {
   Copy,
   Check,
   QrCode,
-  Users,
-  User,
   X,
   Play,
   Shuffle,
@@ -25,6 +23,8 @@ export function CourtQrLobbyModal({
   currentUser,
   profile,
   isUmpire,
+  canManageRoster,
+  onJoinCourt,
   onSessionUpdated,
 }) {
   const [qrSvg, setQrSvg] = useState('');
@@ -39,6 +39,13 @@ export function CourtQrLobbyModal({
   const format = session?.format || 'doubles';
   const playerNames = session?.player_names || {};
   const isLobbyLocked = Boolean(playerNames?.lobbyLocked);
+  const courtNumber = Number(session?.court_number || playerNames?.courtNumber) || null;
+  const assignedUmpireId =
+    playerNames && 'umpireId' in playerNames
+      ? playerNames.umpireId
+      : session?.umpire_id || null;
+  const allowRosterEdit =
+    canManageRoster !== undefined ? canManageRoster : Boolean(isUmpire);
 
   // Derive slots safely
   const slots = useMemo(() => {
@@ -65,9 +72,13 @@ export function CourtQrLobbyModal({
   }, [session?.team_names, format]);
 
   const joinUrl = useMemo(() => {
-    if (typeof window === 'undefined' || !session?.id) return '';
+    if (typeof window === 'undefined') return '';
+    if (courtNumber) {
+      return `${window.location.origin}/?court=${encodeURIComponent(courtNumber)}`;
+    }
+    if (!session?.id) return '';
     return `${window.location.origin}/pikolscore?session=${encodeURIComponent(session.id)}`;
-  }, [session?.id]);
+  }, [courtNumber, session?.id]);
 
   // Generate QR Code SVG on mount or URL change
   useEffect(() => {
@@ -146,7 +157,8 @@ export function CourtQrLobbyModal({
             Authorization: `Bearer ${token}`,
           },
           body: JSON.stringify({
-            sessionId: session.id,
+            sessionId: session?.id,
+            courtNumber,
             ...payload,
           }),
         });
@@ -167,7 +179,7 @@ export function CourtQrLobbyModal({
         setIsSubmitting(false);
       }
     },
-    [session?.id, onSessionUpdated]
+    [session?.id, courtNumber, onSessionUpdated]
   );
 
   // Player action: claim open slot, switch to open slot, or leave
@@ -191,7 +203,7 @@ export function CourtQrLobbyModal({
 
   // Umpire action: assign walk-up player name or clear slot
   const handleUmpireSetSlot = async (teamIdx, slotIdx, walkupName) => {
-    if (isSubmitting || isLobbyLocked) return;
+    if (isSubmitting || isLobbyLocked || !allowRosterEdit) return;
     const res = await callLobbyApi({
       action: 'umpire_set_slot',
       team: teamIdx,
@@ -218,7 +230,7 @@ export function CourtQrLobbyModal({
 
   // Umpire action: Start match
   const handleStartMatch = async () => {
-    if (!slotCount.isFull || isSubmitting) return;
+    if (!slotCount.isFull || isSubmitting || !allowRosterEdit) return;
     const res = await callLobbyApi({
       action: 'start_match',
       servingTeam: firstServer,
@@ -258,22 +270,33 @@ export function CourtQrLobbyModal({
               <QrCode size={24} aria-hidden="true" />
             </div>
             <div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
+                {courtNumber && (
+                  <span className="rounded-full bg-teal px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wider text-cream">
+                    Court {courtNumber}
+                  </span>
+                )}
                 <span className="rounded-full bg-teal/10 px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wider text-teal border border-teal/20">
                   {format === 'singles' ? 'Singles (1 vs 1)' : 'Doubles (2 vs 2)'}
                 </span>
                 <span className="text-[12px] font-semibold text-muted">
-                  Supervised by {playerNames.umpireName || 'Official Umpire'}
+                  {assignedUmpireId
+                    ? `Supervised by ${playerNames.umpireName || 'Official Umpire'}`
+                    : 'Awaiting Umpire'}
                 </span>
               </div>
               <h1 id="lobby-modal-title" className="text-[22px] sm:text-[24px] font-bold text-dark-teal m-0 mt-0.5">
-                {isUmpire ? 'Court QR & Roster Lobby' : 'Courtside Match Lobby'}
+                {isUmpire
+                  ? courtNumber
+                    ? `Court ${courtNumber} QR & Roster Lobby`
+                    : 'Court QR & Roster Lobby'
+                  : 'Courtside Match Lobby'}
               </h1>
             </div>
           </div>
 
-          {/* Close button (allowed for umpire) */}
-          {isUmpire && (
+          {/* Close button */}
+          {onClose && (
             <button
               type="button"
               onClick={onClose}
@@ -316,10 +339,10 @@ export function CourtQrLobbyModal({
 
               <div className="flex flex-col gap-2 min-w-0">
                 <span className="text-[12px] font-bold uppercase tracking-wider text-teal">
-                  Scan to Join Court
+                  Scan to Join {courtNumber ? `Court ${courtNumber}` : 'Court'}
                 </span>
                 <p className="text-[13px] text-muted m-0 leading-normal">
-                  Players can scan this QR code on court with their phone camera to join their team slot.
+                  Players can scan this fixed court QR code with their phone camera to join their team slot.
                 </p>
 
                 <div className="flex items-center gap-2 mt-1">
@@ -379,17 +402,19 @@ export function CourtQrLobbyModal({
                             <span className="text-[14px] font-semibold text-dark-teal truncate">
                               {slot.name}
                             </span>
-                            <button
-                              type="button"
-                              onClick={() => handleUmpireSetSlot(0, idx, '')}
-                              aria-label={`Vacate slot ${slot.name}`}
-                              title="Clear player slot"
-                              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-muted hover:text-error hover:bg-line/40 transition-colors border-0 bg-transparent cursor-pointer"
-                            >
-                              <X size={15} />
-                            </button>
+                            {allowRosterEdit && (
+                              <button
+                                type="button"
+                                onClick={() => handleUmpireSetSlot(0, idx, '')}
+                                aria-label={`Vacate slot ${slot.name}`}
+                                title="Clear player slot"
+                                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-muted hover:text-error hover:bg-line/40 transition-colors border-0 bg-transparent cursor-pointer"
+                              >
+                                <X size={15} />
+                              </button>
+                            )}
                           </>
-                        ) : isInputOpen ? (
+                        ) : isInputOpen && allowRosterEdit ? (
                           <div className="flex items-center gap-1.5 w-full">
                             <input
                               type="text"
@@ -434,17 +459,19 @@ export function CourtQrLobbyModal({
                             <span className="text-[13px] text-muted italic">
                               Open Slot (Awaiting Scan)
                             </span>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setActiveWalkupSlot(slotKey);
-                                setWalkupInputs((prev) => ({ ...prev, [slotKey]: '' }));
-                              }}
-                              className="flex items-center gap-1 text-[11px] font-bold text-teal hover:underline bg-transparent border-0 cursor-pointer"
-                            >
-                              <Plus size={13} />
-                              <span>Add Walk-up</span>
-                            </button>
+                            {allowRosterEdit && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setActiveWalkupSlot(slotKey);
+                                  setWalkupInputs((prev) => ({ ...prev, [slotKey]: '' }));
+                                }}
+                                className="flex items-center gap-1 text-[11px] font-bold text-teal hover:underline bg-transparent border-0 cursor-pointer"
+                              >
+                                <Plus size={13} />
+                                <span>Add Walk-up</span>
+                              </button>
+                            )}
                           </>
                         )}
                       </div>
@@ -478,17 +505,19 @@ export function CourtQrLobbyModal({
                             <span className="text-[14px] font-semibold text-dark-teal truncate">
                               {slot.name}
                             </span>
-                            <button
-                              type="button"
-                              onClick={() => handleUmpireSetSlot(1, idx, '')}
-                              aria-label={`Vacate slot ${slot.name}`}
-                              title="Clear player slot"
-                              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-muted hover:text-error hover:bg-line/40 transition-colors border-0 bg-transparent cursor-pointer"
-                            >
-                              <X size={15} />
-                            </button>
+                            {allowRosterEdit && (
+                              <button
+                                type="button"
+                                onClick={() => handleUmpireSetSlot(1, idx, '')}
+                                aria-label={`Vacate slot ${slot.name}`}
+                                title="Clear player slot"
+                                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-muted hover:text-error hover:bg-line/40 transition-colors border-0 bg-transparent cursor-pointer"
+                              >
+                                <X size={15} />
+                              </button>
+                            )}
                           </>
-                        ) : isInputOpen ? (
+                        ) : isInputOpen && allowRosterEdit ? (
                           <div className="flex items-center gap-1.5 w-full">
                             <input
                               type="text"
@@ -533,17 +562,19 @@ export function CourtQrLobbyModal({
                             <span className="text-[13px] text-muted italic">
                               Open Slot (Awaiting Scan)
                             </span>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setActiveWalkupSlot(slotKey);
-                                setWalkupInputs((prev) => ({ ...prev, [slotKey]: '' }));
-                              }}
-                              className="flex items-center gap-1 text-[11px] font-bold text-teal hover:underline bg-transparent border-0 cursor-pointer"
-                            >
-                              <Plus size={13} />
-                              <span>Add Walk-up</span>
-                            </button>
+                            {allowRosterEdit && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setActiveWalkupSlot(slotKey);
+                                  setWalkupInputs((prev) => ({ ...prev, [slotKey]: '' }));
+                                }}
+                                className="flex items-center gap-1 text-[11px] font-bold text-teal hover:underline bg-transparent border-0 cursor-pointer"
+                              >
+                                <Plus size={13} />
+                                <span>Add Walk-up</span>
+                              </button>
+                            )}
                           </>
                         )}
                       </div>
@@ -553,80 +584,102 @@ export function CourtQrLobbyModal({
               </div>
             </div>
 
-            {/* First Server Selector */}
-            <div className="flex flex-col gap-2 pt-2 border-t border-line">
-              <div className="flex items-center justify-between">
-                <span className="text-[12px] font-bold uppercase tracking-wider text-dark-teal">
-                  First Serving Team
-                </span>
-                <button
-                  type="button"
-                  onClick={handleRandomizeServer}
-                  className="flex items-center gap-1.5 text-[11px] font-semibold text-teal hover:text-forest-teal bg-pale-sage px-2.5 py-1 rounded-full border border-line transition-colors cursor-pointer"
-                >
-                  <Shuffle size={12} aria-hidden="true" />
-                  <span>Randomize</span>
-                </button>
-              </div>
+            {allowRosterEdit ? (
+              <>
+                {/* First Server Selector */}
+                <div className="flex flex-col gap-2 pt-2 border-t border-line">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[12px] font-bold uppercase tracking-wider text-dark-teal">
+                      First Serving Team
+                    </span>
+                    <button
+                      type="button"
+                      onClick={handleRandomizeServer}
+                      className="flex items-center gap-1.5 text-[11px] font-semibold text-teal hover:text-forest-teal bg-pale-sage px-2.5 py-1 rounded-full border border-line transition-colors cursor-pointer"
+                    >
+                      <Shuffle size={12} aria-hidden="true" />
+                      <span>Randomize</span>
+                    </button>
+                  </div>
 
-              {randomNotice && (
-                <div className="text-[12px] font-semibold text-teal">
-                  {randomNotice}
+                  {randomNotice && (
+                    <div className="text-[12px] font-semibold text-teal">
+                      {randomNotice}
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setFirstServer(0)}
+                      className={`h-10 flex items-center justify-center gap-2 rounded-xl text-[13px] font-bold transition-colors border-[1.5px] cursor-pointer ${
+                        firstServer === 0
+                          ? 'bg-teal border-teal text-cream'
+                          : 'bg-off-white border-line text-dark-teal hover:bg-pale-sage'
+                      }`}
+                    >
+                      {firstServer === 0 && <Check size={14} />}
+                      <span className="truncate">{teamNames[0]}</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setFirstServer(1)}
+                      className={`h-10 flex items-center justify-center gap-2 rounded-xl text-[13px] font-bold transition-colors border-[1.5px] cursor-pointer ${
+                        firstServer === 1
+                          ? 'bg-teal border-teal text-cream'
+                          : 'bg-off-white border-line text-dark-teal hover:bg-pale-sage'
+                      }`}
+                    >
+                      {firstServer === 1 && <Check size={14} />}
+                      <span className="truncate">{teamNames[1]}</span>
+                    </button>
+                  </div>
                 </div>
-              )}
 
-              <div className="grid grid-cols-2 gap-2">
+                {/* Start Match CTA */}
                 <button
                   type="button"
-                  onClick={() => setFirstServer(0)}
-                  className={`h-10 flex items-center justify-center gap-2 rounded-xl text-[13px] font-bold transition-colors border-[1.5px] cursor-pointer ${
-                    firstServer === 0
-                      ? 'bg-teal border-teal text-cream'
-                      : 'bg-off-white border-line text-dark-teal hover:bg-pale-sage'
-                  }`}
+                  disabled={!slotCount.isFull || isSubmitting}
+                  onClick={handleStartMatch}
+                  className="mt-2 h-13 w-full flex items-center justify-center gap-2.5 rounded-full bg-teal hover:bg-forest-teal text-cream text-[16px] font-bold shadow-[0_10px_24px_-10px_rgba(15,92,98,0.5)] transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal"
                 >
-                  {firstServer === 0 && <Check size={14} />}
-                  <span className="truncate">{teamNames[0]}</span>
+                  {isSubmitting ? (
+                    <>
+                      <Loader2 size={18} className="animate-spin" />
+                      <span>Starting Match...</span>
+                    </>
+                  ) : slotCount.isFull ? (
+                    <>
+                      <Play size={18} fill="currentColor" />
+                      <span>Start Match (30:00)</span>
+                    </>
+                  ) : (
+                    <span>
+                      Waiting for Players ({slotCount.filled}/{slotCount.total} Claimed)
+                    </span>
+                  )}
                 </button>
-
-                <button
-                  type="button"
-                  onClick={() => setFirstServer(1)}
-                  className={`h-10 flex items-center justify-center gap-2 rounded-xl text-[13px] font-bold transition-colors border-[1.5px] cursor-pointer ${
-                    firstServer === 1
-                      ? 'bg-teal border-teal text-cream'
-                      : 'bg-off-white border-line text-dark-teal hover:bg-pale-sage'
-                  }`}
-                >
-                  {firstServer === 1 && <Check size={14} />}
-                  <span className="truncate">{teamNames[1]}</span>
-                </button>
-              </div>
-            </div>
-
-            {/* Start Match CTA */}
-            <button
-              type="button"
-              disabled={!slotCount.isFull || isSubmitting}
-              onClick={handleStartMatch}
-              className="mt-2 h-13 w-full flex items-center justify-center gap-2.5 rounded-full bg-teal hover:bg-forest-teal text-cream text-[16px] font-bold shadow-[0_10px_24px_-10px_rgba(15,92,98,0.5)] transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal"
-            >
-              {isSubmitting ? (
-                <>
-                  <Loader2 size={18} className="animate-spin" />
-                  <span>Starting Match...</span>
-                </>
-              ) : slotCount.isFull ? (
-                <>
-                  <Play size={18} fill="currentColor" />
-                  <span>Start Match (30:00)</span>
-                </>
-              ) : (
-                <span>
-                  Waiting for Players ({slotCount.filled}/{slotCount.total} Claimed)
+              </>
+            ) : (
+              <div className="pt-2 border-t border-line flex flex-col sm:flex-row items-center justify-between gap-3">
+                <span className="text-[13px] text-muted">
+                  {assignedUmpireId
+                    ? `Officiated by ${playerNames.umpireName || 'another umpire'}.`
+                    : 'Join this court as its official umpire to manage slots and start the match.'}
                 </span>
-              )}
-            </button>
+                {!assignedUmpireId && onJoinCourt && (
+                  <button
+                    type="button"
+                    onClick={onJoinCourt}
+                    disabled={isSubmitting}
+                    className="h-10 px-5 rounded-full bg-teal hover:bg-forest-teal text-cream text-[13px] font-bold transition-colors cursor-pointer border-0 shrink-0"
+                  >
+                    Join Court {courtNumber || ''} as Umpire
+                  </button>
+                )}
+              </div>
+            )}
           </div>
         ) : (
           /* PLAYER VIEW: Pre-Match Lobby Slot Picker */

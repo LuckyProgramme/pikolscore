@@ -44,6 +44,7 @@ export default function RoleChooserPage() {
   const [selectedRole, setSelectedRole] = useState('');
   const [rememberChoice, setRememberChoice] = useState(true);
   const [sessionParam, setSessionParam] = useState(null);
+  const [courtParam, setCourtParam] = useState(null);
   const optionRefs = useRef({});
 
   useEffect(() => {
@@ -53,7 +54,11 @@ export default function RoleChooserPage() {
       const search = typeof window !== 'undefined' ? window.location.search : '';
       const params = new URLSearchParams(search);
       const scannedSession = params.get('session') || null;
-      if (isMounted) setSessionParam(scannedSession);
+      const scannedCourt = params.get('court') || null;
+      if (isMounted) {
+        setSessionParam(scannedSession);
+        setCourtParam(scannedCourt);
+      }
 
       try {
         const {
@@ -66,7 +71,7 @@ export default function RoleChooserPage() {
           const dest = await resolveAuthenticatedDestination(
             supabase,
             session.user.id,
-            scannedSession
+            { sessionId: scannedSession, courtNumber: scannedCourt }
           );
           if (isMounted) router.replace(dest);
           return;
@@ -115,9 +120,10 @@ export default function RoleChooserPage() {
       clearPreferredRole();
     }
 
-    const suffix = sessionParam
-      ? `?session=${encodeURIComponent(sessionParam)}`
-      : '';
+    const p = new URLSearchParams();
+    if (courtParam) p.set('court', courtParam);
+    if (sessionParam) p.set('session', sessionParam);
+    const suffix = p.toString() ? `?${p.toString()}` : '';
     router.push(selectedRole === 'umpire' ? `/umpire${suffix}` : `/player${suffix}`);
   };
 

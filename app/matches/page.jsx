@@ -1,23 +1,33 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Play,
   Shuffle,
-  Timer,
-  Check,
   AlertCircle,
-  Users,
-  User,
   X,
-  AlertTriangle,
-  RotateCcw,
+  QrCode,
+  Plus,
+  Loader2,
+  Shield,
 } from 'lucide-react';
 import { supabase } from '@/config/supabase';
 import Header from '@/components/layout/Header';
 import AuthLoadingSplash from '@/components/auth/AuthLoadingSplash';
+import CourtQrLobbyModal from '@/components/scoreboard/CourtQrLobbyModal';
 import { formatMmSs } from '@/hooks/useMatchTimer';
+
+function getCourtNumber(row) {
+  return Number(row?.court_number || row?.player_names?.courtNumber) || null;
+}
+
+function getAssignedUmpireId(row) {
+  if (row?.player_names && 'umpireId' in row.player_names) {
+    return row.player_names.umpireId || null;
+  }
+  return row?.umpire_id || null;
+}
 
 export default function MatchesPage() {
   const router = useRouter();
@@ -28,35 +38,16 @@ export default function MatchesPage() {
   const [userEmail, setUserEmail] = useState(null);
   const [isAuthLoading, setIsAuthLoading] = useState(true);
 
-  // Active matches state
-  const [activeMatches, setActiveMatches] = useState([]);
-  const [isLoadingMatches, setIsLoadingMatches] = useState(true);
-  const [abandonConfirmId, setAbandonConfirmId] = useState(null);
-  const [tick, setTick] = useState(0);
-
-  // Match creation form state
-  const [format, setFormat] = useState(''); // '' | 'singles' | 'doubles'
-
-  // Singles fields
-  const [player1Name, setPlayer1Name] = useState('');
-  const [player2Name, setPlayer2Name] = useState('');
-  const [singlesServer, setSinglesServer] = useState(0); // 0 (player1) or 1 (player2)
-
-  // Doubles fields
-  const [team1Name, setTeam1Name] = useState('Team A');
-  const [team1Player1, setTeam1Player1] = useState('');
-  const [team1Player2, setTeam1Player2] = useState('');
-
-  const [team2Name, setTeam2Name] = useState('Team B');
-  const [team2Player1, setTeam2Player1] = useState('');
-  const [team2Player2, setTeam2Player2] = useState('');
-
-  const [doublesServingTeam, setDoublesServingTeam] = useState(0); // 0 (team1) or 1 (team2)
-
-  // Form validation & submission state
-  const [formError, setFormError] = useState('');
+  // 4 Courts State (keyed by court number 1..4)
+  const [courtsData, setCourtsData] = useState({});
+  const [isLoadingCourts, setIsLoadingCourts] = useState(true);
+  const [activeWalkup, setActiveWalkup] = useState(null); // { courtNumber, team, slotIndex }
+  const [walkupName, setWalkupName] = useState('');
+  const [firstServerMap, setFirstServerMap] = useState({ 1: 0, 2: 0, 3: 0, 4: 0 });
+  const [qrModalCourtNum, setQrModalCourtNum] = useState(null);
+  const [actionError, setActionError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [randomizedNotice, setRandomizedNotice] = useState('');
+  const [, setTick] = useState(0);
 
   // 1. Authenticate user & load profile
   useEffect(() => {
@@ -107,75 +98,62 @@ export default function MatchesPage() {
     };
   }, [router]);
 
-  // 2. Fetch active matches for this umpire
-  const fetchActiveMatches = useCallback(async (userId) => {
-    if (!userId) return;
+  // 2. Fetch all 4 active court sessions
+  const fetchCourts = useCallback(async () => {
     try {
       const { data, error } = await supabase
         .from('match_sessions')
         .select('*')
-        .eq('umpire_id', userId)
         .eq('status', 'in_progress')
-        .order('updated_at', { ascending: false });
+        .order('updated_at', { ascending: true });
 
       if (error) {
-        console.warn('[MatchesPage] Error fetching active matches:', error);
+        console.warn('[MatchesPage] Error fetching courts:', error);
       } else {
-        setActiveMatches(data || []);
+        const map = {};
+        (data || []).forEach((row) => {
+          const cNum = getCourtNumber(row);
+          if (cNum >= 1 && cNum <= 4) {
+            map[cNum] = row;
+          }
+        });
+        setCourtsData(map);
       }
     } catch (err) {
-      console.error('[MatchesPage] Fetch active matches failed:', err);
+      console.error('[MatchesPage] Failed to fetch courts:', err);
     } finally {
-      setIsLoadingMatches(false);
+      setIsLoadingCourts(false);
     }
   }, []);
 
   useEffect(() => {
-    if (user?.id) {
-      fetchActiveMatches(user.id);
-    }
-  }, [user?.id, fetchActiveMatches]);
+    fetchCourts();
+  }, [fetchCourts]);
 
-  // 3. Subscribe to Realtime changes on match_sessions for this umpire
+  // 3. Realtime subscription across all match_sessions
   useEffect(() => {
-    if (!user?.id) return;
-
     const channel = supabase
-      .channel(`umpire_active_matches_${user.id}`)
+      .channel('all_courts_realtime')
       .on(
         'postgres_changes',
         {
           event: '*',
           schema: 'public',
           table: 'match_sessions',
-          filter: `umpire_id=eq.${user.id}`,
         },
         (payload) => {
           const { eventType, new: newRow, old: oldRow } = payload;
+          setCourtsData((prev) => {
+            const next = { ...prev };
+            const cNum = getCourtNumber(newRow) || getCourtNumber(oldRow);
+            if (!cNum || cNum < 1 || cNum > 4) return prev;
 
-          setActiveMatches((prev) => {
-            if (eventType === 'DELETE') {
-              return prev.filter((m) => m.id !== oldRow.id);
+            if (eventType === 'DELETE' || (newRow && newRow.status !== 'in_progress')) {
+              delete next[cNum];
+            } else if (newRow && newRow.status === 'in_progress') {
+              next[cNum] = newRow;
             }
-
-            if (eventType === 'INSERT') {
-              if (newRow.status === 'in_progress') {
-                return [newRow, ...prev.filter((m) => m.id !== newRow.id)];
-              }
-              return prev;
-            }
-
-            if (eventType === 'UPDATE') {
-              if (newRow.status === 'in_progress') {
-                const filtered = prev.filter((m) => m.id !== newRow.id);
-                return [newRow, ...filtered];
-              } else {
-                // Status changed to 'completed' or 'abandoned'
-                return prev.filter((m) => m.id !== newRow.id);
-              }
-            }
-
-            return prev;
+            return next;
           });
         }
       )
@@ -184,264 +162,190 @@ export default function MatchesPage() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [user?.id]);
+  }, []);
 
-  // 4. Local 1000ms tick for live countdown timers across active cards
+  // 4. Timer tick for live display
   useEffect(() => {
-    const timer = setInterval(() => {
-      setTick((t) => t + 1);
-    }, 1000);
+    const timer = setInterval(() => setTick((t) => t + 1), 1000);
     return () => clearInterval(timer);
   }, []);
 
-  // Compute remaining seconds and timer badge for each active match
-  const getTimerInfo = (match) => {
-    if (!match) return { text: '30:00', isExpired: false, isRunning: false };
+  // 5. Active Match Lock Check: If this umpire is on a STARTED match (lobbyLocked === true), redirect!
+  useEffect(() => {
+    if (!user?.id || isLoadingCourts) return;
 
-    if (match.timer_status === 'running' && match.timer_ends_at) {
-      const endsAt = new Date(match.timer_ends_at).getTime();
-      const remMs = Math.max(0, endsAt - Date.now());
-      const remSec = Math.ceil(remMs / 1000);
-      return {
-        text: formatMmSs(remSec),
-        isExpired: remSec <= 0,
-        isRunning: remSec > 0,
-      };
+    for (let c = 1; c <= 4; c++) {
+      const cSession = courtsData[c];
+      if (
+        cSession &&
+        getAssignedUmpireId(cSession) === user.id &&
+        cSession.player_names?.lobbyLocked === true
+      ) {
+        router.replace(`/pikolscore?session=${encodeURIComponent(cSession.id)}`);
+        return;
+      }
     }
+  }, [user?.id, courtsData, isLoadingCourts, router]);
 
-    if (match.timer_status === 'paused') {
-      const remMs = match.timer_remaining_ms ?? 1800000;
-      return {
-        text: `${formatMmSs(Math.ceil(remMs / 1000))} (Paused)`,
-        isExpired: false,
-        isRunning: false,
-      };
+  // Auto-join if arriving via ?court=1..4 and currently unassigned
+  useEffect(() => {
+    if (!user?.id || isLoadingCourts) return;
+    const search = typeof window !== 'undefined' ? window.location.search : '';
+    const scannedCourt = Number(new URLSearchParams(search).get('court'));
+    if (scannedCourt >= 1 && scannedCourt <= 4) {
+      const alreadyAssigned = Object.values(courtsData).some(
+        (s) => getAssignedUmpireId(s) === user.id
+      );
+      if (!alreadyAssigned) {
+        const targetSession = courtsData[scannedCourt];
+        if (!targetSession || !getAssignedUmpireId(targetSession)) {
+          handleJoinCourt(scannedCourt);
+        }
+      }
     }
+  }, [user?.id, isLoadingCourts]); // eslint-disable-line react-hooks/exhaustive-deps
 
-    if (match.timer_status === 'expired') {
-      return { text: "Time's Up (00:00)", isExpired: true, isRunning: false };
-    }
-
-    return { text: '30:00 (Idle)', isExpired: false, isRunning: false };
-  };
-
-  // 5. Handle match abandonment
-  const handleAbandonMatch = async (matchId) => {
+  // Helper to call lobby API with auth token
+  const callLobbyApi = async (payload) => {
+    setActionError('');
+    setIsSubmitting(true);
     try {
-      const { error } = await supabase.rpc('fn_close_session', {
-        p_session_id: matchId,
-        p_status: 'abandoned',
+      const {
+        data: { session: authSession },
+      } = await supabase.auth.getSession();
+      const token = authSession?.access_token || '';
+
+      const res = await fetch('/api/match/lobby', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(payload),
       });
-      if (error) {
-        console.error('[MatchesPage] Failed to abandon match:', error);
-      } else {
-        setActiveMatches((prev) => prev.filter((m) => m.id !== matchId));
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to update court');
       }
+
+      const cNum = getCourtNumber(data.session) || Number(payload.courtNumber);
+      if (data.session && cNum) {
+        setCourtsData((prev) => ({
+          ...prev,
+          [cNum]: data.session,
+        }));
+      }
+      return data;
     } catch (err) {
-      console.error('[MatchesPage] Abandon error:', err);
+      setActionError(err.message || 'Operation failed');
+      return null;
     } finally {
-      setAbandonConfirmId(null);
+      setIsSubmitting(false);
     }
   };
 
-  // 6. Randomize First Server handlers
-  const handleRandomizeSingles = () => {
-    const randomPick = Math.random() < 0.5 ? 0 : 1;
-    setSinglesServer(randomPick);
-    const chosenName =
-      randomPick === 0
-        ? player1Name.trim() || 'Player 1'
-        : player2Name.trim() || 'Player 2';
-    setRandomizedNotice(`Randomly selected: ${chosenName} serves first!`);
-    setTimeout(() => setRandomizedNotice(''), 3500);
-  };
-
-  const handleRandomizeDoubles = () => {
-    const randomPick = Math.random() < 0.5 ? 0 : 1;
-    setDoublesServingTeam(randomPick);
-    const chosenName =
-      randomPick === 0
-        ? team1Name.trim() || 'Team 1'
-        : team2Name.trim() || 'Team 2';
-    setRandomizedNotice(`Randomly selected: ${chosenName} serves first!`);
-    setTimeout(() => setRandomizedNotice(''), 3500);
-  };
-
-  // 7. Form submission: create session & navigate
-  const handleCreateMatch = async (e) => {
-    e.preventDefault();
-    setFormError('');
-
-    if (!format) {
-      setFormError('Please select a match format (Singles or Doubles).');
-      return;
-    }
-
-    const umpireDisplayName =
-      profile?.full_name?.trim() ||
-      user?.user_metadata?.full_name?.trim() ||
-      user?.email?.split('@')[0] ||
-      'Official Umpire';
-
-    if (format === 'singles') {
-      const p1 = player1Name.trim();
-      const p2 = player2Name.trim();
-
-      if (p1 && p2 && p1.toLowerCase() === p2.toLowerCase()) {
-        setFormError('Player names must be distinct.');
-        return;
-      }
-
-      const isFullyFilled = Boolean(p1 && p2);
-
-      setIsSubmitting(true);
-      try {
-        const newSessionId =
-          typeof crypto !== 'undefined' && crypto.randomUUID
-            ? crypto.randomUUID()
-            : `sess_${Date.now()}`;
-
-        const teamNames = [p1 || 'Player 1', p2 || 'Player 2'];
-        const playerNames = {
-          team0: [p1],
-          team1: [p2],
-          slots: {
-            team0: [p1 ? { userId: null, name: p1 } : null],
-            team1: [p2 ? { userId: null, name: p2 } : null],
-          },
-          umpireName: umpireDisplayName,
-          lobbyLocked: isFullyFilled,
-        };
-
-        const initialState = {
-          format: 'singles',
-          scores: [0, 0],
-          servingTeam: singlesServer,
-          serverNumber: 1,
-          serverCourt: 'right',
-          courtPositions: [
-            { left: '', right: p1 },
-            { left: '', right: p2 },
-          ],
-          gameOver: false,
-          winner: null,
-        };
-
-        const { error } = await supabase.rpc('fn_create_session', {
-          p_session_id: newSessionId,
-          p_format: 'singles',
-          p_team_keys: ['omega', 'alpha'],
-          p_team_names: teamNames,
-          p_team_palettes: ['omega', 'alpha'],
-          p_player_names: playerNames,
-          p_initial_state: initialState,
-          p_timer_duration_ms: 1800000,
-          p_legacy_log: null,
-          p_auto_start_timer: isFullyFilled,
-        });
-
-        if (error) {
-          setFormError(`Failed to create match: ${error.message}`);
-          setIsSubmitting(false);
-          return;
-        }
-
-        router.push(`/pikolscore?session=${newSessionId}`);
-      } catch (err) {
-        console.error('[MatchesPage] Create singles match error:', err);
-        setFormError('An unexpected error occurred. Please try again.');
-        setIsSubmitting(false);
-      }
-    } else if (format === 'doubles') {
-      const t1 = team1Name.trim() || 'Team A';
-      const t2 = team2Name.trim() || 'Team B';
-
-      if (t1.toLowerCase() === t2.toLowerCase()) {
-        setFormError('Team names must be distinct.');
-        return;
-      }
-
-      const t1p1 = team1Player1.trim();
-      const t1p2 = team1Player2.trim();
-      const t2p1 = team2Player1.trim();
-      const t2p2 = team2Player2.trim();
-
-      const isFullyFilled = Boolean(t1p1 && t1p2 && t2p1 && t2p2);
-
-      setIsSubmitting(true);
-      try {
-        const newSessionId =
-          typeof crypto !== 'undefined' && crypto.randomUUID
-            ? crypto.randomUUID()
-            : `sess_${Date.now()}`;
-
-        const teamNames = [t1, t2];
-        const playerNames = {
-          team0: [t1p1, t1p2],
-          team1: [t2p1, t2p2],
-          slots: {
-            team0: [
-              t1p1 ? { userId: null, name: t1p1 } : null,
-              t1p2 ? { userId: null, name: t1p2 } : null,
-            ],
-            team1: [
-              t2p1 ? { userId: null, name: t2p1 } : null,
-              t2p2 ? { userId: null, name: t2p2 } : null,
-            ],
-          },
-          umpireName: umpireDisplayName,
-          lobbyLocked: isFullyFilled,
-        };
-
-        const initialState = {
-          format: 'doubles',
-          scores: [0, 0],
-          servingTeam: doublesServingTeam,
-          serverNumber: 2, // Doubles starts 0-0-2
-          serverCourt: 'right',
-          courtPositions: [
-            { left: t1p2, right: t1p1 },
-            { left: t2p2, right: t2p1 },
-          ],
-          gameOver: false,
-          winner: null,
-        };
-
-        const { error } = await supabase.rpc('fn_create_session', {
-          p_session_id: newSessionId,
-          p_format: 'doubles',
-          p_team_keys: ['omega', 'alpha'],
-          p_team_names: teamNames,
-          p_team_palettes: ['omega', 'alpha'],
-          p_player_names: playerNames,
-          p_initial_state: initialState,
-          p_timer_duration_ms: 1800000,
-          p_legacy_log: null,
-          p_auto_start_timer: isFullyFilled,
-        });
-
-        if (error) {
-          setFormError(`Failed to create match: ${error.message}`);
-          setIsSubmitting(false);
-          return;
-        }
-
-        router.push(`/pikolscore?session=${newSessionId}`);
-      } catch (err) {
-        console.error('[MatchesPage] Create doubles match error:', err);
-        setFormError('An unexpected error occurred. Please try again.');
-        setIsSubmitting(false);
-      }
+  // Umpire Actions
+  const handleJoinCourt = async (courtNumber) => {
+    if (isSubmitting) return;
+    const res = await callLobbyApi({
+      action: 'join_umpire',
+      courtNumber,
+    });
+    if (res?.success) {
+      fetchCourts();
     }
   };
+
+  const handleLeaveCourt = async (courtNumber) => {
+    if (isSubmitting) return;
+    const s = courtsData[courtNumber];
+    if (!s) return;
+    const res = await callLobbyApi({
+      action: 'leave_umpire',
+      sessionId: s.id,
+      courtNumber,
+    });
+    if (res?.success) {
+      fetchCourts();
+    }
+  };
+
+  const handleSetWalkupSlot = async (courtNumber, team, slotIndex, name) => {
+    const s = courtsData[courtNumber];
+    if (!s || isSubmitting) return;
+    const res = await callLobbyApi({
+      action: 'umpire_set_slot',
+      sessionId: s.id,
+      courtNumber,
+      team,
+      slotIndex,
+      walkupName: name,
+    });
+    if (res?.success) {
+      setActiveWalkup(null);
+      setWalkupName('');
+    }
+  };
+
+  const handleRandomizeServer = (courtNumber) => {
+    const pick = Math.random() < 0.5 ? 0 : 1;
+    setFirstServerMap((prev) => ({ ...prev, [courtNumber]: pick }));
+  };
+
+  const handleStartMatch = async (courtNumber) => {
+    const s = courtsData[courtNumber];
+    if (!s || isSubmitting) return;
+    const servingTeam = firstServerMap[courtNumber] ?? 0;
+    const res = await callLobbyApi({
+      action: 'start_match',
+      sessionId: s.id,
+      courtNumber,
+      servingTeam,
+      teamNames: s.team_names || ['Team A', 'Team B'],
+    });
+
+    if (res?.success && res.session?.id) {
+      router.push(`/pikolscore?session=${encodeURIComponent(res.session.id)}`);
+    }
+  };
+
+  // Identify which court the caller is currently assigned to (if any)
+  const myAssignedCourtNumber = useMemo(() => {
+    if (!user?.id) return null;
+    for (let c = 1; c <= 4; c++) {
+      if (getAssignedUmpireId(courtsData[c]) === user.id) {
+        return c;
+      }
+    }
+    return null;
+  }, [user?.id, courtsData]);
+
+  const activeQrModalSession = useMemo(() => {
+    if (!qrModalCourtNum) return null;
+    return (
+      courtsData[qrModalCourtNum] || {
+        court_number: qrModalCourtNum,
+        format: 'doubles',
+        team_names: ['Team A', 'Team B'],
+        player_names: {
+          courtNumber: qrModalCourtNum,
+          umpireId: null,
+          umpireName: null,
+          lobbyLocked: false,
+          slots: { team0: [null, null], team1: [null, null] },
+        },
+      }
+    );
+  }, [qrModalCourtNum, courtsData]);
 
   if (isAuthLoading) {
-    return <AuthLoadingSplash label="Loading courtside match hub..." />;
+    return <AuthLoadingSplash label="Loading courtside umpire hub..." />;
   }
 
   return (
     <div className="ps-shell min-h-screen flex flex-col bg-[#FAF9F5] text-[#203F39]">
-      {/* 1. Header (Shared header with Back and Match Log buttons hidden on hub) */}
+      {/* 1. Header */}
       <Header
         profile={profile}
         userEmail={userEmail}
@@ -449,571 +353,534 @@ export default function MatchesPage() {
         isGuest={false}
       />
 
-      {/* 2. Main Workspace (Side-by-side on desktop, stacked on mobile) */}
+      {/* 2. Main Workspace */}
       <main className="flex-1 w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="mb-6">
-          <h1 className="text-3xl font-bold tracking-tight text-[#084B46]">
-            Umpire Match Hub
-          </h1>
-          <p className="mt-1 text-sm text-[#748079]">
-            Register a new match or monitor and continue your active courts in real time.
-          </p>
+        {/* Page Title & Status Banner */}
+        <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="rounded-full bg-[#EAF0E5] px-3 py-1 text-xs font-bold uppercase tracking-wider text-[#0F5C62] border border-[#E2E5DC]">
+                4 Fixed Courts
+              </span>
+              <span className="text-xs text-[#748079]">Doubles Format (2 vs 2)</span>
+            </div>
+            <h1 className="text-3xl font-bold tracking-tight text-[#084B46] mt-1">
+              Umpire Court Hub
+            </h1>
+            <p className="mt-1 text-sm text-[#748079]">
+              Join a court as its official umpire to supervise player arrival, manage walk-ups, and officiate.
+            </p>
+          </div>
+
+          {myAssignedCourtNumber && (
+            <div className="flex items-center gap-3 bg-[#EAF0E5] border border-[#0F5C62]/30 px-4 py-2.5 rounded-2xl">
+              <Shield size={18} className="text-[#0F5C62] shrink-0" />
+              <div>
+                <div className="text-xs font-bold text-[#084B46]">
+                  Assigned to Court {myAssignedCourtNumber}
+                </div>
+                <div className="text-[11px] text-[#748079]">
+                  Single-court rule: Finish or leave before joining another court.
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-          {/* LEFT COLUMN: Mandatory Create Match Setup Form */}
-          <section
-            aria-labelledby="create-match-heading"
-            className="lg:col-span-5 bg-[#FEFEFB] border-[1.5px] border-[#E2E5DC] rounded-3xl p-6 sm:p-7 shadow-[0_4px_16px_-4px_rgba(8,75,70,0.06)]"
+        {/* Global Error Banner */}
+        {actionError && (
+          <div
+            role="alert"
+            className="mb-6 rounded-2xl bg-red-50 border border-red-200 p-4 text-sm font-semibold text-[#BA1A1A] flex items-center justify-between gap-3 animate-in fade-in"
           >
-            <div className="flex items-center justify-between pb-4 mb-5 border-b border-[#E2E5DC]">
-              <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-full bg-[#EAF0E5] flex items-center justify-center text-[#0F5C62]">
-                  <Play size={16} fill="currentColor" />
-                </div>
-                <h2
-                  id="create-match-heading"
-                  className="text-xl font-bold text-[#084B46] tracking-tight"
-                >
-                  Create New Match
-                </h2>
-              </div>
-              <span className="text-xs font-semibold uppercase tracking-wider text-[#0F5C62] bg-[#EAF0E5] px-2.5 py-1 rounded-full">
-                11 Pts · Win by 2
-              </span>
+            <div className="flex items-center gap-2">
+              <AlertCircle size={18} className="shrink-0" />
+              <span>{actionError}</span>
             </div>
+            <button
+              type="button"
+              onClick={() => setActionError('')}
+              className="p-1 text-red-500 hover:text-red-700 bg-transparent border-0 cursor-pointer"
+            >
+              <X size={16} />
+            </button>
+          </div>
+        )}
 
-            <form noValidate onSubmit={handleCreateMatch} className="flex flex-col gap-5">
-              {/* Format Dropdown */}
-              <div className="flex flex-col gap-1.5">
-                <label
-                  htmlFor="match-format"
-                  className="text-xs font-bold uppercase tracking-wider text-[#084B46]"
-                >
-                  Match Format <span className="text-[#0F5C62]">*</span>
-                </label>
-                <div className="relative">
-                  <select
-                    id="match-format"
-                    value={format}
-                    onChange={(e) => {
-                      setFormat(e.target.value);
-                      setFormError('');
-                      setRandomizedNotice('');
-                    }}
-                    className="w-full h-12 appearance-none rounded-xl bg-[#FAF9F5] border-[1.5px] border-[#E2E5DC] px-4 pr-10 text-[15px] font-semibold text-[#084B46] focus:border-[#0F5C62] focus:outline-none focus:ring-2 focus:ring-[#0F5C62]/20 cursor-pointer"
-                  >
-                    <option value="" disabled>
-                      Select match format...
-                    </option>
-                    <option value="singles">Singles (1 vs 1)</option>
-                    <option value="doubles">Doubles (2 vs 2)</option>
-                  </select>
-                  <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3.5 text-[#748079]">
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
-                    </svg>
-                  </div>
-                </div>
-              </div>
+        {/* 4 Fixed Courts Grid */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
+          {[1, 2, 3, 4].map((courtNum) => {
+            const session = courtsData[courtNum];
+            const assignedUmpireId = getAssignedUmpireId(session);
+            const isMyCourt = Boolean(user?.id && assignedUmpireId === user.id);
+            const isMatchStarted = Boolean(session?.player_names?.lobbyLocked);
+            const umpireName = session?.player_names?.umpireName;
+            const hasOtherUmpire = Boolean(assignedUmpireId && !isMyCourt);
 
-              {/* DYNAMIC FORM: Singles */}
-              {format === 'singles' && (
-                <div className="flex flex-col gap-4 animate-in fade-in duration-200">
-                  <div className="p-3 bg-[#EAF0E5]/70 rounded-xl border border-[#E2E5DC] flex items-center gap-2 text-xs text-[#203F39]">
-                    <User size={15} className="text-[#0F5C62] shrink-0" />
-                    <span>Singles registration: Enter player names or leave blank for court QR scan.</span>
-                  </div>
+            // Derive slots
+            const pNames = session?.player_names || {};
+            const slots = pNames.slots || { team0: [null, null], team1: [null, null] };
+            const team0Slots = slots.team0 || [null, null];
+            const team1Slots = slots.team1 || [null, null];
 
-                  {/* Player 1 */}
-                  <div className="flex flex-col gap-1.5">
-                    <label
-                      htmlFor="singles-player-1"
-                      className="text-xs font-bold text-[#084B46]"
-                    >
-                      Player 1 Name <span className="text-xs font-normal text-[#748079]">(Optional for QR)</span>
-                    </label>
-                    <input
-                      id="singles-player-1"
-                      type="text"
-                      placeholder="Optional — leave blank for QR scan"
-                      value={player1Name}
-                      onChange={(e) => setPlayer1Name(e.target.value)}
-                      className="h-11 rounded-xl bg-[#FAF9F5] border-[1.5px] border-[#E2E5DC] px-4 text-sm font-medium text-[#084B46] placeholder:text-[#748079] focus:border-[#0F5C62] focus:outline-none focus:ring-2 focus:ring-[#0F5C62]/20"
-                    />
-                  </div>
+            // Filled slots count
+            const filledCount =
+              (team0Slots[0]?.name ? 1 : 0) +
+              (team0Slots[1]?.name ? 1 : 0) +
+              (team1Slots[0]?.name ? 1 : 0) +
+              (team1Slots[1]?.name ? 1 : 0);
+            const isFull = filledCount === 4;
 
-                  {/* Player 2 */}
-                  <div className="flex flex-col gap-1.5">
-                    <label
-                      htmlFor="singles-player-2"
-                      className="text-xs font-bold text-[#084B46]"
-                    >
-                      Player 2 Name <span className="text-xs font-normal text-[#748079]">(Optional for QR)</span>
-                    </label>
-                    <input
-                      id="singles-player-2"
-                      type="text"
-                      placeholder="Optional — leave blank for QR scan"
-                      value={player2Name}
-                      onChange={(e) => setPlayer2Name(e.target.value)}
-                      className="h-11 rounded-xl bg-[#FAF9F5] border-[1.5px] border-[#E2E5DC] px-4 text-sm font-medium text-[#084B46] placeholder:text-[#748079] focus:border-[#0F5C62] focus:outline-none focus:ring-2 focus:ring-[#0F5C62]/20"
-                    />
-                  </div>
+            // Timer display if match is started
+            const timerEndsAt = session?.timer_ends_at;
+            let timerDisplay = '30:00';
+            if (isMatchStarted && timerEndsAt) {
+              const remMs = Math.max(0, new Date(timerEndsAt).getTime() - Date.now());
+              timerDisplay = formatMmSs(Math.ceil(remMs / 1000));
+            }
 
-                  {/* First Server Selector + Randomize Button */}
-                  <div className="flex flex-col gap-2 pt-2 border-t border-[#E2E5DC]">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold uppercase tracking-wider text-[#084B46]">
-                        First Server Selection
-                      </span>
-                      <button
-                        type="button"
-                        onClick={handleRandomizeSingles}
-                        className="flex items-center gap-1.5 text-xs font-semibold text-[#0F5C62] hover:text-[#085953] bg-[#EAF0E5] px-2.5 py-1 rounded-full border border-[#E2E5DC] transition-colors cursor-pointer"
-                        title="Randomly pick who serves first"
-                      >
-                        <Shuffle size={13} aria-hidden="true" />
-                        <span>Randomize</span>
-                      </button>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setSinglesServer(0)}
-                        className={`h-11 flex items-center justify-center gap-2 rounded-xl text-xs font-bold transition-colors border-[1.5px] cursor-pointer ${
-                          singlesServer === 0
-                            ? 'bg-[#0F5C62] border-[#0F5C62] text-[#FEECD6]'
-                            : 'bg-[#FAF9F5] border-[#E2E5DC] text-[#203F39] hover:bg-[#EAF0E5]'
-                        }`}
-                      >
-                        {singlesServer === 0 && <Check size={14} />}
-                        <span className="truncate">
-                          {player1Name.trim() || 'Player 1'}
-                        </span>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => setSinglesServer(1)}
-                        className={`h-11 flex items-center justify-center gap-2 rounded-xl text-xs font-bold transition-colors border-[1.5px] cursor-pointer ${
-                          singlesServer === 1
-                            ? 'bg-[#0F5C62] border-[#0F5C62] text-[#FEECD6]'
-                            : 'bg-[#FAF9F5] border-[#E2E5DC] text-[#203F39] hover:bg-[#EAF0E5]'
-                        }`}
-                      >
-                        {singlesServer === 1 && <Check size={14} />}
-                        <span className="truncate">
-                          {player2Name.trim() || 'Player 2'}
-                        </span>
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* DYNAMIC FORM: Doubles */}
-              {format === 'doubles' && (
-                <div className="flex flex-col gap-4 animate-in fade-in duration-200">
-                  <div className="p-3 bg-[#EAF0E5]/70 rounded-xl border border-[#E2E5DC] flex items-center gap-2 text-xs text-[#203F39]">
-                    <Users size={15} className="text-[#0F5C62] shrink-0" />
-                    <span>Doubles registration: Defaults to Team A vs. Team B. Enter names or leave blank for QR scan.</span>
-                  </div>
-
-                  {/* Team 1 Registration */}
-                  <div className="p-3.5 rounded-2xl bg-[#FAF9F5] border border-[#E2E5DC] flex flex-col gap-3">
-                    <div className="text-xs font-bold uppercase tracking-wider text-[#084B46]">
-                      Team 1 Details
-                    </div>
-                    <div className="flex flex-col gap-1">
-                      <label htmlFor="team1-name" className="text-xs font-semibold text-[#203F39]">
-                        Team 1 Name
-                      </label>
-                      <input
-                        id="team1-name"
-                        type="text"
-                        placeholder="e.g. Team A"
-                        value={team1Name}
-                        onChange={(e) => setTeam1Name(e.target.value)}
-                        className="h-10 rounded-lg bg-[#FEFEFB] border border-[#E2E5DC] px-3 text-sm font-medium text-[#084B46] placeholder:text-[#748079] focus:border-[#0F5C62] focus:outline-none"
-                      />
-                    </div>
-                    <div className="grid grid-cols-2 gap-2">
-                      <div className="flex flex-col gap-1">
-                        <label htmlFor="team1-p1" className="text-[11px] font-semibold text-[#748079]">
-                          Player 1 (Optional)
-                        </label>
-                        <input
-                          id="team1-p1"
-                          type="text"
-                          placeholder="Optional — QR scan"
-                          value={team1Player1}
-                          onChange={(e) => setTeam1Player1(e.target.value)}
-                          className="h-9 rounded-lg bg-[#FEFEFB] border border-[#E2E5DC] px-2.5 text-xs font-medium text-[#084B46] placeholder:text-[#748079] focus:border-[#0F5C62] focus:outline-none"
-                        />
-                      </div>
-                      <div className="flex flex-col gap-1">
-                        <label htmlFor="team1-p2" className="text-[11px] font-semibold text-[#748079]">
-                          Player 2 (Optional)
-                        </label>
-                        <input
-                          id="team1-p2"
-                          type="text"
-                          placeholder="Optional — QR scan"
-                          value={team1Player2}
-                          onChange={(e) => setTeam1Player2(e.target.value)}
-                          className="h-9 rounded-lg bg-[#FEFEFB] border border-[#E2E5DC] px-2.5 text-xs font-medium text-[#084B46] placeholder:text-[#748079] focus:border-[#0F5C62] focus:outline-none"
-                        />
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Team 2 Registration */}
-                  <div className="p-3.5 rounded-2xl bg-[#FAF9F5] border border-[#E2E5DC] flex flex-col gap-3">
-                    <div className="text-xs font-bold uppercase tracking-wider text-[#084B46]">
-                      Team 2 Details
-                    </div>
-                    <div className="flex flex-col gap-1">
-                      <label htmlFor="team2-name" className="text-xs font-semibold text-[#203F39]">
-                        Team 2 Name
-                      </label>
-                      <input
-                        id="team2-name"
-                        type="text"
-                        placeholder="e.g. Team B"
-                        value={team2Name}
-                        onChange={(e) => setTeam2Name(e.target.value)}
-                        className="h-10 rounded-lg bg-[#FEFEFB] border border-[#E2E5DC] px-3 text-sm font-medium text-[#084B46] placeholder:text-[#748079] focus:border-[#0F5C62] focus:outline-none"
-                      />
-                    </div>
-                    <div className="grid grid-cols-2 gap-2">
-                      <div className="flex flex-col gap-1">
-                        <label htmlFor="team2-p1" className="text-[11px] font-semibold text-[#748079]">
-                          Player 1 (Optional)
-                        </label>
-                        <input
-                          id="team2-p1"
-                          type="text"
-                          placeholder="Optional — QR scan"
-                          value={team2Player1}
-                          onChange={(e) => setTeam2Player1(e.target.value)}
-                          className="h-9 rounded-lg bg-[#FEFEFB] border border-[#E2E5DC] px-2.5 text-xs font-medium text-[#084B46] placeholder:text-[#748079] focus:border-[#0F5C62] focus:outline-none"
-                        />
-                      </div>
-                      <div className="flex flex-col gap-1">
-                        <label htmlFor="team2-p2" className="text-[11px] font-semibold text-[#748079]">
-                          Player 2 (Optional)
-                        </label>
-                        <input
-                          id="team2-p2"
-                          type="text"
-                          placeholder="Optional — QR scan"
-                          value={team2Player2}
-                          onChange={(e) => setTeam2Player2(e.target.value)}
-                          className="h-9 rounded-lg bg-[#FEFEFB] border border-[#E2E5DC] px-2.5 text-xs font-medium text-[#084B46] placeholder:text-[#748079] focus:border-[#0F5C62] focus:outline-none"
-                        />
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Serving Team Selector + Randomize Button */}
-                  <div className="flex flex-col gap-2 pt-2 border-t border-[#E2E5DC]">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold uppercase tracking-wider text-[#084B46]">
-                        First Serving Team
-                      </span>
-                      <button
-                        type="button"
-                        onClick={handleRandomizeDoubles}
-                        className="flex items-center gap-1.5 text-xs font-semibold text-[#0F5C62] hover:text-[#085953] bg-[#EAF0E5] px-2.5 py-1 rounded-full border border-[#E2E5DC] transition-colors cursor-pointer"
-                        title="Randomly pick which team serves first"
-                      >
-                        <Shuffle size={13} aria-hidden="true" />
-                        <span>Randomize</span>
-                      </button>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setDoublesServingTeam(0)}
-                        className={`h-11 flex items-center justify-center gap-2 rounded-xl text-xs font-bold transition-colors border-[1.5px] cursor-pointer ${
-                          doublesServingTeam === 0
-                            ? 'bg-[#0F5C62] border-[#0F5C62] text-[#FEECD6]'
-                            : 'bg-[#FAF9F5] border-[#E2E5DC] text-[#203F39] hover:bg-[#EAF0E5]'
-                        }`}
-                      >
-                        {doublesServingTeam === 0 && <Check size={14} />}
-                        <span className="truncate">
-                          {team1Name.trim() || 'Team 1'}
-                        </span>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => setDoublesServingTeam(1)}
-                        className={`h-11 flex items-center justify-center gap-2 rounded-xl text-xs font-bold transition-colors border-[1.5px] cursor-pointer ${
-                          doublesServingTeam === 1
-                            ? 'bg-[#0F5C62] border-[#0F5C62] text-[#FEECD6]'
-                            : 'bg-[#FAF9F5] border-[#E2E5DC] text-[#203F39] hover:bg-[#EAF0E5]'
-                        }`}
-                      >
-                        {doublesServingTeam === 1 && <Check size={14} />}
-                        <span className="truncate">
-                          {team2Name.trim() || 'Team 2'}
-                        </span>
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Format not yet selected */}
-              {!format && (
-                <div className="p-6 bg-[#FAF9F5] rounded-2xl border border-dashed border-[#E2E5DC] text-center text-sm text-[#748079]">
-                  Select <b>Singles</b> or <b>Doubles</b> in the dropdown above to display the mandatory player registration form.
-                </div>
-              )}
-
-              {/* Feedback & Notifications */}
-              {randomizedNotice && (
-                <div
-                  role="status"
-                  className="p-3 bg-[#FEECD6] border border-[#E2E5DC] rounded-xl text-xs font-semibold text-[#084B46] flex items-center gap-2"
-                >
-                  <Shuffle size={14} className="text-[#0F5C62]" />
-                  <span>{randomizedNotice}</span>
-                </div>
-              )}
-
-              {formError && (
-                <div
-                  role="alert"
-                  className="p-3 bg-red-50 border border-red-200 rounded-xl text-xs font-semibold text-[#BA1A1A] flex items-center gap-2"
-                >
-                  <AlertCircle size={15} className="shrink-0" />
-                  <span>{formError}</span>
-                </div>
-              )}
-
-              {/* Submit CTA */}
-              {(() => {
-                const isFormComplete =
-                  format === 'singles'
-                    ? Boolean(player1Name.trim() && player2Name.trim())
-                    : Boolean(
-                        team1Player1.trim() &&
-                          team1Player2.trim() &&
-                          team2Player1.trim() &&
-                          team2Player2.trim()
-                      );
-
-                return (
-                  <button
-                    type="submit"
-                    disabled={!format || isSubmitting}
-                    className="mt-2 h-13 w-full flex items-center justify-center gap-2.5 rounded-full bg-[#0F5C62] hover:bg-[#085953] active:translate-y-[1px] text-[#FEECD6] text-[16px] font-bold shadow-[0_10px_24px_-10px_rgba(15,92,98,0.5)] transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F5C62]"
-                  >
-                    <Play size={18} fill="currentColor" />
-                    <span>
-                      {isSubmitting
-                        ? 'Opening Match...'
-                        : isFormComplete
-                        ? 'Start Match on Scoreboard'
-                        : 'Open Court & Show QR Code'}
-                    </span>
-                  </button>
-                );
-              })()}
-            </form>
-          </section>
-
-          {/* RIGHT COLUMN: Active Matches Live List */}
-          <section
-            aria-labelledby="active-matches-heading"
-            className="lg:col-span-7 flex flex-col gap-4"
-          >
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2.5">
-                <h2
-                  id="active-matches-heading"
-                  className="text-xl font-bold text-[#084B46] tracking-tight"
-                >
-                  Active Matches Under Your Supervision
-                </h2>
-                <span className="text-xs font-bold text-[#0F5C62] bg-[#EAF0E5] px-2.5 py-0.5 rounded-full border border-[#E2E5DC]">
-                  {activeMatches.length}
-                </span>
-              </div>
-            </div>
-
-            {isLoadingMatches ? (
-              <div className="p-12 bg-[#FEFEFB] rounded-3xl border border-[#E2E5DC] flex flex-col items-center justify-center gap-3 text-sm text-[#748079]">
-                <div className="w-6 h-6 border-2 border-[#0F5C62] border-t-transparent rounded-full animate-spin" />
-                <span>Loading active match sessions...</span>
-              </div>
-            ) : activeMatches.length === 0 ? (
-              <div className="p-10 bg-[#FEFEFB] rounded-3xl border border-dashed border-[#E2E5DC] flex flex-col items-center justify-center text-center gap-2.5 text-[#748079]">
-                <div className="w-12 h-12 rounded-full bg-[#EAF0E5] flex items-center justify-center text-[#0F5C62] mb-1">
-                  <Play size={22} fill="currentColor" />
-                </div>
-                <h3 className="text-base font-bold text-[#084B46]">
-                  No active matches right now
-                </h3>
-                <p className="text-sm max-w-sm">
-                  Complete the setup form on the left to start your next match, or return to any court when ready.
-                </p>
-              </div>
-            ) : (
-              <div className="flex flex-col gap-4">
-                {activeMatches.map((m) => {
-                  const timerInfo = getTimerInfo(m);
-                  const isSingles = m.format === 'singles';
-                  const team0 = m.team_names?.[0] || 'Team 1';
-                  const team1 = m.team_names?.[1] || 'Team 2';
-                  const score0 = m.score_team0 ?? 0;
-                  const score1 = m.score_team1 ?? 0;
-                  const servingTeam = m.serving_team ?? 0;
-
-                  const pNames0 = m.player_names?.team0 || [];
-                  const pNames1 = m.player_names?.team1 || [];
-
-                  const isConfirmingAbandon = abandonConfirmId === m.id;
-
-                  return (
+            return (
+              <div
+                key={courtNum}
+                className={`rounded-3xl border-[1.5px] p-6 sm:p-7 shadow-[0_4px_16px_-4px_rgba(8,75,70,0.06)] transition-all flex flex-col gap-5 ${
+                  isMyCourt
+                    ? 'bg-[#FEFEFB] border-[#0F5C62] ring-2 ring-[#0F5C62]/20'
+                    : 'bg-[#FEFEFB] border-[#E2E5DC]'
+                }`}
+              >
+                {/* Court Card Header */}
+                <div className="flex items-center justify-between pb-4 border-b border-[#E2E5DC]">
+                  <div className="flex items-center gap-3">
                     <div
-                      key={m.id}
-                      className="bg-[#FEFEFB] border-[1.5px] border-[#E2E5DC] rounded-3xl p-5 sm:p-6 shadow-[0_4px_16px_-4px_rgba(8,75,70,0.06)] hover:border-[#0F5C62]/40 transition-all flex flex-col gap-4"
+                      className={`flex h-11 w-11 items-center justify-center rounded-2xl font-black text-lg ${
+                        isMyCourt
+                          ? 'bg-[#0F5C62] text-[#FEECD6]'
+                          : 'bg-[#EAF0E5] text-[#084B46]'
+                      }`}
                     >
-                      {/* Top status bar */}
-                      <div className="flex items-center justify-between gap-2 flex-wrap">
-                        <div className="flex items-center gap-2">
-                          <span className="text-[11px] font-bold uppercase tracking-wider text-[#0F5C62] bg-[#EAF0E5] px-2.5 py-1 rounded-full border border-[#E2E5DC]">
-                            {isSingles ? 'Singles' : 'Doubles'}
+                      {courtNum}
+                    </div>
+                    <div>
+                      <h2 className="text-xl font-bold text-[#084B46] tracking-tight m-0">
+                        Court {courtNum}
+                      </h2>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        {isMatchStarted ? (
+                          <span className="inline-flex items-center gap-1.5 text-xs font-bold text-[#BA1A1A]">
+                            <span className="w-2 h-2 rounded-full bg-[#BA1A1A] animate-ping" />
+                            Match in Progress ({timerDisplay})
                           </span>
-                          <span
-                            className={`flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full border ${
-                              timerInfo.isExpired
-                                ? 'bg-red-50 text-[#BA1A1A] border-red-200'
-                                : timerInfo.isRunning
-                                ? 'bg-[#FAF9F5] text-[#084B46] border-[#E2E5DC]'
-                                : 'bg-amber-50 text-amber-800 border-amber-200'
-                            }`}
-                          >
-                            <Timer size={13} className="shrink-0" />
-                            <span className="font-mono tabular-nums">{timerInfo.text}</span>
+                        ) : filledCount > 0 ? (
+                          <span className="text-xs font-semibold text-[#0F5C62]">
+                            Lobby Open · {filledCount}/4 Players
                           </span>
-                        </div>
-
-                        {/* Abandon Action */}
-                        <div>
-                          {isConfirmingAbandon ? (
-                            <div className="flex items-center gap-1.5">
-                              <span className="text-xs font-semibold text-[#BA1A1A]">
-                                End match?
-                              </span>
-                              <button
-                                type="button"
-                                onClick={() => handleAbandonMatch(m.id)}
-                                className="px-2.5 py-1 bg-[#BA1A1A] text-white rounded-lg text-xs font-bold hover:bg-red-800 transition-colors cursor-pointer"
-                              >
-                                Yes
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => setAbandonConfirmId(null)}
-                                className="px-2 py-1 bg-[#FAF9F5] border border-[#E2E5DC] text-[#748079] rounded-lg text-xs font-semibold hover:bg-[#EAF0E5] transition-colors cursor-pointer"
-                              >
-                                Cancel
-                              </button>
-                            </div>
-                          ) : (
-                            <button
-                              type="button"
-                              onClick={() => setAbandonConfirmId(m.id)}
-                              className="text-xs font-semibold text-[#748079] hover:text-[#BA1A1A] px-2 py-1 rounded-lg hover:bg-red-50 transition-colors cursor-pointer"
-                              title="Abandon and close match session"
-                            >
-                              Abandon
-                            </button>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Matchup & Score Display */}
-                      <div className="grid grid-cols-2 gap-3 items-center bg-[#FAF9F5] rounded-2xl p-4 border border-[#E2E5DC]">
-                        {/* Side 0 */}
-                        <div className="flex flex-col gap-0.5">
-                          <div className="flex items-center gap-1.5">
-                            <span className="font-bold text-base text-[#084B46] truncate">
-                              {team0}
-                            </span>
-                            {servingTeam === 0 && (
-                              <span className="w-2 h-2 rounded-full bg-[#0F5C62] animate-pulse" title="Serving" />
-                            )}
-                          </div>
-                          {!isSingles && pNames0.length > 0 && (
-                            <span className="text-xs text-[#748079] truncate">
-                              {pNames0.filter(Boolean).join(' · ')}
-                            </span>
-                          )}
-                          <div className="mt-1 font-mono text-3xl font-black text-[#084B46] tabular-nums">
-                            {score0}
-                          </div>
-                        </div>
-
-                        {/* Side 1 */}
-                        <div className="flex flex-col gap-0.5 text-right items-end">
-                          <div className="flex items-center gap-1.5">
-                            {servingTeam === 1 && (
-                              <span className="w-2 h-2 rounded-full bg-[#0F5C62] animate-pulse" title="Serving" />
-                            )}
-                            <span className="font-bold text-base text-[#084B46] truncate">
-                              {team1}
-                            </span>
-                          </div>
-                          {!isSingles && pNames1.length > 0 && (
-                            <span className="text-xs text-[#748079] truncate">
-                              {pNames1.filter(Boolean).join(' · ')}
-                            </span>
-                          )}
-                          <div className="mt-1 font-mono text-3xl font-black text-[#084B46] tabular-nums">
-                            {score1}
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Primary CTA: Continue or View Result if time expired */}
-                      <div>
-                        {timerInfo.isExpired ? (
-                          <button
-                            type="button"
-                            onClick={() => router.push(`/pikolscore?session=${m.id}`)}
-                            className="h-11 w-full flex items-center justify-center gap-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-sm shadow-sm transition-colors cursor-pointer"
-                          >
-                            <AlertTriangle size={16} />
-                            <span>Time's Up — View Result on Scoreboard</span>
-                          </button>
                         ) : (
-                          <button
-                            type="button"
-                            onClick={() => router.push(`/pikolscore?session=${m.id}`)}
-                            className="h-11 w-full flex items-center justify-center gap-2 rounded-xl bg-[#0F5C62] hover:bg-[#085953] text-[#FEECD6] font-bold text-sm shadow-sm transition-colors cursor-pointer"
-                          >
-                            <Play size={15} fill="currentColor" />
-                            <span>Continue Scoring Match</span>
-                          </button>
+                          <span className="text-xs text-[#748079]">Available Court</span>
                         )}
                       </div>
                     </div>
-                  );
-                })}
+                  </div>
+
+                  {/* QR Code Action Button */}
+                  <button
+                    type="button"
+                    onClick={() => setQrModalCourtNum(courtNum)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#FAF9F5] border border-[#E2E5DC] text-xs font-semibold text-[#084B46] hover:bg-[#EAF0E5] transition-colors cursor-pointer"
+                    title={`View QR Code for Court ${courtNum}`}
+                  >
+                    <QrCode size={14} />
+                    <span>Court QR</span>
+                  </button>
+                </div>
+
+                {/* Umpire Assignment Status */}
+                <div className="flex items-center justify-between p-3 rounded-2xl bg-[#FAF9F5] border border-[#E2E5DC]">
+                  <div className="flex items-center gap-2 text-xs">
+                    <Shield
+                      size={15}
+                      className={
+                        isMyCourt
+                          ? 'text-[#0F5C62]'
+                          : hasOtherUmpire
+                          ? 'text-[#748079]'
+                          : 'text-[#D97706]'
+                      }
+                    />
+                    <span className="font-semibold text-[#203F39]">
+                      {isMyCourt
+                        ? 'Officiating: You'
+                        : hasOtherUmpire
+                        ? `Officiating: ${umpireName || 'Another Umpire'}`
+                        : 'No Umpire Assigned'}
+                    </span>
+                  </div>
+
+                  {/* Umpire Join / Leave Buttons */}
+                  <div>
+                    {isMyCourt ? (
+                      !isMatchStarted && (
+                        <button
+                          type="button"
+                          onClick={() => handleLeaveCourt(courtNum)}
+                          disabled={isSubmitting}
+                          className="text-xs font-bold text-[#BA1A1A] hover:underline bg-transparent border-0 cursor-pointer"
+                        >
+                          Leave Court
+                        </button>
+                      )
+                    ) : !hasOtherUmpire && !isMatchStarted ? (
+                      <button
+                        type="button"
+                        onClick={() => handleJoinCourt(courtNum)}
+                        disabled={isSubmitting || Boolean(myAssignedCourtNumber)}
+                        title={
+                          myAssignedCourtNumber
+                            ? `You must leave Court ${myAssignedCourtNumber} first`
+                            : 'Join as official umpire for this court'
+                        }
+                        className="px-3 py-1.5 rounded-full bg-[#0F5C62] text-[#FEECD6] text-xs font-bold hover:bg-[#085953] transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed border-0"
+                      >
+                        Join as Umpire
+                      </button>
+                    ) : null}
+                  </div>
+                </div>
+
+                {/* VIEW A: Match in Progress on this court */}
+                {isMatchStarted ? (
+                  <div className="flex flex-col gap-4">
+                    {/* Score summary block */}
+                    <div className="grid grid-cols-2 gap-3 p-4 rounded-2xl bg-[#EAF0E5]/60 border border-[#E2E5DC] text-center">
+                      <div className="flex flex-col items-center">
+                        <span className="text-xs font-bold text-[#748079] uppercase">
+                          {session.team_names?.[0] || 'Team A'}
+                        </span>
+                        <span className="font-mono text-3xl font-black text-[#084B46] mt-1">
+                          {session.score_team0 ?? 0}
+                        </span>
+                      </div>
+                      <div className="flex flex-col items-center border-l border-[#E2E5DC]">
+                        <span className="text-xs font-bold text-[#748079] uppercase">
+                          {session.team_names?.[1] || 'Team B'}
+                        </span>
+                        <span className="font-mono text-3xl font-black text-[#084B46] mt-1">
+                          {session.score_team1 ?? 0}
+                        </span>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => router.push(`/pikolscore?session=${session.id}`)}
+                      className="h-12 w-full flex items-center justify-center gap-2 rounded-full bg-[#0F5C62] text-[#FEECD6] text-sm font-bold hover:bg-[#085953] transition-colors cursor-pointer"
+                    >
+                      <Play size={16} fill="currentColor" />
+                      <span>{isMyCourt ? 'Resume Scoreboard' : 'Spectate Scoreboard'}</span>
+                    </button>
+                  </div>
+                ) : (
+                  /* VIEW B: Pre-Match Lobby & Roster Slots */
+                  <div className="flex flex-col gap-4">
+                    {/* 4 Player Slots Grid */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {/* Team A Slots */}
+                      <div className="flex flex-col gap-2 p-3 rounded-2xl bg-[#FAF9F5] border border-[#E2E5DC]">
+                        <span className="text-xs font-bold text-[#084B46] uppercase tracking-wider">
+                          Team A Slots
+                        </span>
+                        {[0, 1].map((sIdx) => {
+                          const slot = team0Slots[sIdx];
+                          const hasPlayer = Boolean(slot?.name?.trim());
+                          const isAdding =
+                            activeWalkup?.courtNumber === courtNum &&
+                            activeWalkup?.team === 0 &&
+                            activeWalkup?.slotIndex === sIdx;
+
+                          return (
+                            <div
+                              key={`t0-${sIdx}`}
+                              className="flex items-center justify-between gap-1.5 p-2 rounded-xl bg-white border border-[#E2E5DC] text-xs min-h-[38px]"
+                            >
+                              {hasPlayer ? (
+                                <>
+                                  <span className="font-semibold text-[#084B46] truncate">
+                                    {slot.name}
+                                  </span>
+                                  {isMyCourt && (
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        handleSetWalkupSlot(courtNum, 0, sIdx, '')
+                                      }
+                                      className="text-[#748079] hover:text-[#BA1A1A] p-1 bg-transparent border-0 cursor-pointer"
+                                      title="Remove player"
+                                    >
+                                      <X size={14} />
+                                    </button>
+                                  )}
+                                </>
+                              ) : isAdding ? (
+                                <div className="flex items-center gap-1 w-full">
+                                  <input
+                                    type="text"
+                                    autoFocus
+                                    placeholder="Walk-up name"
+                                    value={walkupName}
+                                    onChange={(e) => setWalkupName(e.target.value)}
+                                    onKeyDown={(e) => {
+                                      if (e.key === 'Enter') {
+                                        handleSetWalkupSlot(courtNum, 0, sIdx, walkupName);
+                                      } else if (e.key === 'Escape') {
+                                        setActiveWalkup(null);
+                                      }
+                                    }}
+                                    className="h-7 flex-1 min-w-0 rounded bg-[#FAF9F5] border border-[#E2E5DC] px-2 text-xs text-[#084B46] outline-none"
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      handleSetWalkupSlot(courtNum, 0, sIdx, walkupName)
+                                    }
+                                    className="h-7 px-2 rounded bg-[#0F5C62] text-[11px] font-bold text-white border-0 cursor-pointer"
+                                  >
+                                    Add
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setActiveWalkup(null)}
+                                    className="h-7 px-1.5 text-xs text-[#748079] bg-transparent border-0 cursor-pointer"
+                                  >
+                                    <X size={13} />
+                                  </button>
+                                </div>
+                              ) : (
+                                <>
+                                  <span className="text-[#748079] italic">
+                                    Slot {sIdx + 1}: Open
+                                  </span>
+                                  {isMyCourt && (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setActiveWalkup({ courtNumber: courtNum, team: 0, slotIndex: sIdx });
+                                        setWalkupName('');
+                                      }}
+                                      className="text-[#0F5C62] hover:underline font-bold text-[11px] bg-transparent border-0 cursor-pointer flex items-center gap-0.5"
+                                    >
+                                      <Plus size={12} />
+                                      <span>Walk-up</span>
+                                    </button>
+                                  )}
+                                </>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      {/* Team B Slots */}
+                      <div className="flex flex-col gap-2 p-3 rounded-2xl bg-[#FAF9F5] border border-[#E2E5DC]">
+                        <span className="text-xs font-bold text-[#084B46] uppercase tracking-wider">
+                          Team B Slots
+                        </span>
+                        {[0, 1].map((sIdx) => {
+                          const slot = team1Slots[sIdx];
+                          const hasPlayer = Boolean(slot?.name?.trim());
+                          const isAdding =
+                            activeWalkup?.courtNumber === courtNum &&
+                            activeWalkup?.team === 1 &&
+                            activeWalkup?.slotIndex === sIdx;
+
+                          return (
+                            <div
+                              key={`t1-${sIdx}`}
+                              className="flex items-center justify-between gap-1.5 p-2 rounded-xl bg-white border border-[#E2E5DC] text-xs min-h-[38px]"
+                            >
+                              {hasPlayer ? (
+                                <>
+                                  <span className="font-semibold text-[#084B46] truncate">
+                                    {slot.name}
+                                  </span>
+                                  {isMyCourt && (
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        handleSetWalkupSlot(courtNum, 1, sIdx, '')
+                                      }
+                                      className="text-[#748079] hover:text-[#BA1A1A] p-1 bg-transparent border-0 cursor-pointer"
+                                      title="Remove player"
+                                    >
+                                      <X size={14} />
+                                    </button>
+                                  )}
+                                </>
+                              ) : isAdding ? (
+                                <div className="flex items-center gap-1 w-full">
+                                  <input
+                                    type="text"
+                                    autoFocus
+                                    placeholder="Walk-up name"
+                                    value={walkupName}
+                                    onChange={(e) => setWalkupName(e.target.value)}
+                                    onKeyDown={(e) => {
+                                      if (e.key === 'Enter') {
+                                        handleSetWalkupSlot(courtNum, 1, sIdx, walkupName);
+                                      } else if (e.key === 'Escape') {
+                                        setActiveWalkup(null);
+                                      }
+                                    }}
+                                    className="h-7 flex-1 min-w-0 rounded bg-[#FAF9F5] border border-[#E2E5DC] px-2 text-xs text-[#084B46] outline-none"
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      handleSetWalkupSlot(courtNum, 1, sIdx, walkupName)
+                                    }
+                                    className="h-7 px-2 rounded bg-[#0F5C62] text-[11px] font-bold text-white border-0 cursor-pointer"
+                                  >
+                                    Add
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setActiveWalkup(null)}
+                                    className="h-7 px-1.5 text-xs text-[#748079] bg-transparent border-0 cursor-pointer"
+                                  >
+                                    <X size={13} />
+                                  </button>
+                                </div>
+                              ) : (
+                                <>
+                                  <span className="text-[#748079] italic">
+                                    Slot {sIdx + 1}: Open
+                                  </span>
+                                  {isMyCourt && (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setActiveWalkup({ courtNumber: courtNum, team: 1, slotIndex: sIdx });
+                                        setWalkupName('');
+                                      }}
+                                      className="text-[#0F5C62] hover:underline font-bold text-[11px] bg-transparent border-0 cursor-pointer flex items-center gap-0.5"
+                                    >
+                                      <Plus size={12} />
+                                      <span>Walk-up</span>
+                                    </button>
+                                  )}
+                                </>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Controls only shown to the assigned umpire on this court */}
+                    {isMyCourt ? (
+                      <div className="flex flex-col gap-3 pt-2 border-t border-[#E2E5DC]">
+                        {/* Server selection */}
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold text-[#084B46]">
+                            First Serving Team
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handleRandomizeServer(courtNum)}
+                            className="flex items-center gap-1 text-[11px] font-semibold text-[#0F5C62] bg-[#EAF0E5] px-2 py-0.5 rounded-full border border-[#E2E5DC] cursor-pointer"
+                          >
+                            <Shuffle size={11} />
+                            <span>Randomize</span>
+                          </button>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setFirstServerMap((prev) => ({ ...prev, [courtNum]: 0 }))
+                            }
+                            className={`h-9 rounded-xl text-xs font-bold transition-colors border cursor-pointer ${
+                              firstServerMap[courtNum] === 0
+                                ? 'bg-[#0F5C62] border-[#0F5C62] text-[#FEECD6]'
+                                : 'bg-[#FAF9F5] border-[#E2E5DC] text-[#203F39]'
+                            }`}
+                          >
+                            Team A
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setFirstServerMap((prev) => ({ ...prev, [courtNum]: 1 }))
+                            }
+                            className={`h-9 rounded-xl text-xs font-bold transition-colors border cursor-pointer ${
+                              firstServerMap[courtNum] === 1
+                                ? 'bg-[#0F5C62] border-[#0F5C62] text-[#FEECD6]'
+                                : 'bg-[#FAF9F5] border-[#E2E5DC] text-[#203F39]'
+                            }`}
+                          >
+                            Team B
+                          </button>
+                        </div>
+
+                        {/* Start Match CTA */}
+                        <button
+                          type="button"
+                          disabled={!isFull || isSubmitting}
+                          onClick={() => handleStartMatch(courtNum)}
+                          className="h-12 w-full flex items-center justify-center gap-2 rounded-full bg-[#0F5C62] text-[#FEECD6] text-sm font-bold hover:bg-[#085953] transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed border-0 shadow-sm"
+                        >
+                          {isSubmitting ? (
+                            <>
+                              <Loader2 size={16} className="animate-spin" />
+                              <span>Starting Match...</span>
+                            </>
+                          ) : isFull ? (
+                            <>
+                              <Play size={16} fill="currentColor" />
+                              <span>Start Match (30:00)</span>
+                            </>
+                          ) : (
+                            <span>Waiting for 4 Players ({filledCount}/4)</span>
+                          )}
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="text-center p-3 rounded-xl bg-[#FAF9F5] border border-dashed border-[#E2E5DC] text-xs text-[#748079]">
+                        {hasOtherUmpire
+                          ? 'Umpire assigned. Waiting for full roster to start match.'
+                          : 'Join as umpire to manage roster and start match.'}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
-            )}
-          </section>
+            );
+          })}
         </div>
       </main>
+
+      {/* QR Modal for court */}
+      {activeQrModalSession && (
+        <CourtQrLobbyModal
+          isOpen={Boolean(activeQrModalSession)}
+          onClose={() => setQrModalCourtNum(null)}
+          session={activeQrModalSession}
+          currentUser={{ id: user?.id, email: userEmail }}
+          profile={profile}
+          isUmpire={true}
+          canManageRoster={getAssignedUmpireId(activeQrModalSession) === user?.id}
+          onJoinCourt={
+            !myAssignedCourtNumber && !getAssignedUmpireId(activeQrModalSession)
+              ? () => handleJoinCourt(qrModalCourtNum)
+              : undefined
+          }
+          onSessionUpdated={(updated) => {
+            const cNum = getCourtNumber(updated) || qrModalCourtNum;
+            if (cNum) {
+              setCourtsData((prev) => ({ ...prev, [cNum]: updated }));
+            }
+          }}
+        />
+      )}
     </div>
   );
 }

@@ -26,6 +26,8 @@ export default function RootPage() {
       }
 
       const sessionParam = params.get('session') || null;
+      const courtParam = params.get('court') || null;
+      const target = { sessionId: sessionParam, courtNumber: courtParam };
 
       try {
         const {
@@ -38,17 +40,17 @@ export default function RootPage() {
           const dest = await resolveAuthenticatedDestination(
             supabase,
             session.user.id,
-            sessionParam
+            target
           );
           if (isMounted) router.replace(dest);
           return;
         }
 
-        router.replace(resolveSignedOutDestination(sessionParam));
+        router.replace(resolveSignedOutDestination(target));
       } catch (err) {
         console.error('Error resolving root route:', err);
         if (isMounted) {
-          router.replace(resolveSignedOutDestination(sessionParam));
+          router.replace(resolveSignedOutDestination(target));
         }
       }
     }

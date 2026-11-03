@@ -45,7 +45,8 @@ export type Database = {
       match_sessions: {
         Row: {
           id: string;
-          umpire_id: string;
+          umpire_id: string | null;
+          court_number: number | null;
           format: 'singles' | 'doubles';
           target_score: number;
           win_by: number;
@@ -76,7 +77,8 @@ export type Database = {
         };
         Insert: {
           id: string;
-          umpire_id?: string;
+          umpire_id?: string | null;
+          court_number?: number | null;
           format?: 'singles' | 'doubles';
           target_score?: number;
           win_by?: number;
@@ -107,7 +109,8 @@ export type Database = {
         };
         Update: {
           id?: string;
-          umpire_id?: string;
+          umpire_id?: string | null;
+          court_number?: number | null;
           format?: 'singles' | 'doubles';
           target_score?: number;
           win_by?: number;

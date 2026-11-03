@@ -35,6 +35,7 @@ export function Scoreboard() {
   const [isTimeExpired, setIsTimeExpired] = useState(false);
   const [qrModalExplicitOpen, setQrModalExplicitOpen] = useState(false);
   const [umpireDismissedLobby, setUmpireDismissedLobby] = useState(false);
+  const [showAbandonModal, setShowAbandonModal] = useState(false);
 
   // 1. Detect Viewer / Guest State (isGuest disables officiating controls)
   const [isGuest, setIsGuest] = useState(() => {
@@ -292,6 +293,18 @@ export function Scoreboard() {
     router.push('/matches');
   }, [sync, state?.gameOver, timer.status, router]);
 
+  const handleAbandon = useCallback(async () => {
+    if (isGuest || !sync?.sessionId) return;
+    try {
+      await sync.closeSession('abandoned');
+      router.replace('/matches');
+    } catch (err) {
+      console.error('Failed to abandon match:', err);
+    } finally {
+      setShowAbandonModal(false);
+    }
+  }, [isGuest, sync, router]);
+
   const handleUndoWinningPoint = useCallback(() => {
     if (isGuest) return;
     undo();
@@ -429,14 +442,14 @@ export function Scoreboard() {
       {/* 3. Header remains outside the disabled/inert wrapper */}
       <Header
         onBack={
-          profile
-            ? () =>
-                router.push(profile.role === 'player' ? '/player' : '/matches')
-            : !isGuest
-            ? () => router.push('/matches')
+          state?.gameOver
+            ? profile?.role === 'player'
+              ? () => router.push('/player')
+              : () => router.push('/matches')
             : undefined
         }
         backLabel={profile?.role === 'player' ? 'Profile' : 'Matches'}
+        onAbandonMatch={isOwningUmpire && !state?.gameOver ? () => setShowAbandonModal(true) : undefined}
         onOpenQrModal={sync?.sessionId ? () => setQrModalExplicitOpen(true) : undefined}
         onOpenLog={() => !isGuest && setLogOpen(true)}
         profile={profile}
@@ -445,7 +458,7 @@ export function Scoreboard() {
         syncStatus={sync?.syncStatus}
         pendingCount={sync?.pendingCount}
         isCloudSync={sync?.isEnabled}
-        inert={gameWonModalOpen || undefined}
+        inert={gameWonModalOpen || showAbandonModal || undefined}
       />
 
       {/* 4. Main scoreboard & game controls put behind glass for guests */}
@@ -573,6 +586,44 @@ export function Scoreboard() {
             sync.refetchAndRehydrate(updated);
           }}
         />
+      )}
+
+      {/* 6. Abandon Match Confirmation Dialog */}
+      {showAbandonModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-deep-green/75 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="abandon-modal-title"
+        >
+          <div className="w-full max-w-md bg-ivory rounded-3xl p-6 border border-line shadow-2xl text-center">
+            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-error/10 text-error mb-4">
+              <AlertTriangle size={24} aria-hidden="true" />
+            </div>
+            <h3 id="abandon-modal-title" className="text-xl font-bold text-dark-teal mb-2">
+              Abandon Match?
+            </h3>
+            <p className="text-sm text-muted mb-6 leading-relaxed">
+              Abandoning this match will remove all players from the court and free the court for a new match. This action cannot be undone.
+            </p>
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => setShowAbandonModal(false)}
+                className="flex-1 h-11 rounded-full border border-line bg-off-white text-dark-teal font-semibold text-sm hover:bg-pale-sage cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleAbandon}
+                className="flex-1 h-11 rounded-full bg-[#BA1A1A] text-white font-semibold text-sm hover:bg-red-800 cursor-pointer border-0"
+              >
+                Yes, Abandon
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

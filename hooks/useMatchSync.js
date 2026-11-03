@@ -421,9 +421,19 @@ export function useMatchSync({ engineRef, timerRef, isGuest = false }) {
       const teamKeys = engine.teamKeys || ['omega', 'alpha'];
       const teamNames = engine.teamNames || ['Team Omega', 'Team Alpha'];
       const teamPalettes = engine.teamPalettes || ['omega', 'alpha'];
-      const playerNames = engine.playerNames || {
+      const prevPNames = serverSession?.player_names || {};
+      const basePNames = engine.playerNames || {
         team0: ['Player 1', 'Player 2'],
         team1: ['Player 3', 'Player 4'],
+      };
+      const playerNames = {
+        ...prevPNames,
+        ...basePNames,
+        ...(prevPNames.courtNumber ? { courtNumber: prevPNames.courtNumber } : {}),
+        ...(prevPNames.umpireId ? { umpireId: prevPNames.umpireId } : {}),
+        ...(prevPNames.umpireName ? { umpireName: prevPNames.umpireName } : {}),
+        ...(prevPNames.slots ? { slots: prevPNames.slots } : {}),
+        lobbyLocked: true,
       };
 
       const initialState = engineToRallyState(engine);
