@@ -258,6 +258,22 @@ export function Scoreboard() {
     state?.gameOver || timer.status === 'expired' || timer.remainingSeconds === 0
   );
 
+  // While officiating an active match, trap browser back button so umpire stays on scoreboard
+  useEffect(() => {
+    if (!isOwningUmpire || isMatchOver) return;
+
+    window.history.pushState({ page: 'scoreboard' }, '', window.location.href);
+
+    const handlePopState = () => {
+      window.history.pushState({ page: 'scoreboard' }, '', window.location.href);
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+    };
+  }, [isOwningUmpire, isMatchOver]);
+
   const handleRematch = useCallback(async () => {
     if (isGuest || isTransitioningMatchRef.current) return;
     isTransitioningMatchRef.current = true;

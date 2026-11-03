@@ -124,7 +124,7 @@ export default function RoleChooserPage() {
     if (courtParam) p.set('court', courtParam);
     if (sessionParam) p.set('session', sessionParam);
     const suffix = p.toString() ? `?${p.toString()}` : '';
-    router.push(selectedRole === 'umpire' ? `/umpire${suffix}` : `/player${suffix}`);
+    router.replace(selectedRole === 'umpire' ? `/umpire${suffix}` : `/player${suffix}`);
   };
 
   if (checkingAuth) {

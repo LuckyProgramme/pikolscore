@@ -337,7 +337,7 @@ export function LoginForm({ initialMode = 'signin' }) {
               { sessionId: sessionParam, courtNumber: courtParam }
             );
           }
-          router.push(dest);
+          router.replace(dest);
           return;
         }
 
@@ -391,11 +391,11 @@ export function LoginForm({ initialMode = 'signin' }) {
           data.session.user.id,
           { sessionId: sessionParam, courtNumber: courtParam }
         );
-        router.push(dest);
+        router.replace(dest);
         return;
       }
 
-      router.push('/matches');
+      router.replace('/matches');
     } catch (err) {
       setPasswordError(
         formatAuthError(err, 'Check your internet connection and try again.')

@@ -98,6 +98,22 @@ export default function MatchesPage() {
     };
   }, [router]);
 
+  // 1b. Trap browser back button so authenticated umpires stay on /matches
+  useEffect(() => {
+    if (isAuthLoading || !user) return;
+
+    window.history.pushState({ page: 'matches' }, '', window.location.href);
+
+    const handlePopState = () => {
+      window.history.pushState({ page: 'matches' }, '', window.location.href);
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+    };
+  }, [isAuthLoading, user]);
+
   // 2. Fetch all 4 active court sessions
   const fetchCourts = useCallback(async () => {
     try {

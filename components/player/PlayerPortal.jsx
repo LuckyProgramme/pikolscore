@@ -294,6 +294,22 @@ export default function PlayerPortal() {
     }
   }
 
+  // Prevent browser back button from falling back to login or external previous tab history
+  useEffect(() => {
+    if (loadingInitial || !session?.user || profile?.role === 'referee') return;
+
+    window.history.pushState({ page: 'player' }, '', window.location.href);
+
+    const handlePopState = () => {
+      window.history.pushState({ page: 'player' }, '', window.location.href);
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+    };
+  }, [loadingInitial, session?.user, profile?.role]);
+
   // 4. Lobby API Caller for Player slot claiming / leaving
   const callLobbyApi = async (payload) => {
     setLobbyError('');
