@@ -43,11 +43,11 @@ export default function MatchesPage() {
   const [singlesServer, setSinglesServer] = useState(0); // 0 (player1) or 1 (player2)
 
   // Doubles fields
-  const [team1Name, setTeam1Name] = useState('');
+  const [team1Name, setTeam1Name] = useState('Team A');
   const [team1Player1, setTeam1Player1] = useState('');
   const [team1Player2, setTeam1Player2] = useState('');
 
-  const [team2Name, setTeam2Name] = useState('');
+  const [team2Name, setTeam2Name] = useState('Team B');
   const [team2Player1, setTeam2Player1] = useState('');
   const [team2Player2, setTeam2Player2] = useState('');
 
@@ -277,18 +277,22 @@ export default function MatchesPage() {
       return;
     }
 
+    const umpireDisplayName =
+      profile?.full_name?.trim() ||
+      user?.user_metadata?.full_name?.trim() ||
+      user?.email?.split('@')[0] ||
+      'Official Umpire';
+
     if (format === 'singles') {
       const p1 = player1Name.trim();
       const p2 = player2Name.trim();
 
-      if (!p1 || !p2) {
-        setFormError('Both Player 1 and Player 2 names are required for Singles.');
-        return;
-      }
-      if (p1.toLowerCase() === p2.toLowerCase()) {
+      if (p1 && p2 && p1.toLowerCase() === p2.toLowerCase()) {
         setFormError('Player names must be distinct.');
         return;
       }
+
+      const isFullyFilled = Boolean(p1 && p2);
 
       setIsSubmitting(true);
       try {
@@ -297,10 +301,16 @@ export default function MatchesPage() {
             ? crypto.randomUUID()
             : `sess_${Date.now()}`;
 
-        const teamNames = [p1, p2];
+        const teamNames = [p1 || 'Player 1', p2 || 'Player 2'];
         const playerNames = {
           team0: [p1],
           team1: [p2],
+          slots: {
+            team0: [p1 ? { userId: null, name: p1 } : null],
+            team1: [p2 ? { userId: null, name: p2 } : null],
+          },
+          umpireName: umpireDisplayName,
+          lobbyLocked: isFullyFilled,
         };
 
         const initialState = {
@@ -327,7 +337,7 @@ export default function MatchesPage() {
           p_initial_state: initialState,
           p_timer_duration_ms: 1800000,
           p_legacy_log: null,
-          p_auto_start_timer: true,
+          p_auto_start_timer: isFullyFilled,
         });
 
         if (error) {
@@ -343,26 +353,20 @@ export default function MatchesPage() {
         setIsSubmitting(false);
       }
     } else if (format === 'doubles') {
-      const t1 = team1Name.trim();
-      const t1p1 = team1Player1.trim();
-      const t1p2 = team1Player2.trim();
+      const t1 = team1Name.trim() || 'Team A';
+      const t2 = team2Name.trim() || 'Team B';
 
-      const t2 = team2Name.trim();
-      const t2p1 = team2Player1.trim();
-      const t2p2 = team2Player2.trim();
-
-      if (!t1 || !t1p1 || !t1p2) {
-        setFormError('Team 1 name and both of its player names are required.');
-        return;
-      }
-      if (!t2 || !t2p1 || !t2p2) {
-        setFormError('Team 2 name and both of its player names are required.');
-        return;
-      }
       if (t1.toLowerCase() === t2.toLowerCase()) {
         setFormError('Team names must be distinct.');
         return;
       }
+
+      const t1p1 = team1Player1.trim();
+      const t1p2 = team1Player2.trim();
+      const t2p1 = team2Player1.trim();
+      const t2p2 = team2Player2.trim();
+
+      const isFullyFilled = Boolean(t1p1 && t1p2 && t2p1 && t2p2);
 
       setIsSubmitting(true);
       try {
@@ -375,6 +379,18 @@ export default function MatchesPage() {
         const playerNames = {
           team0: [t1p1, t1p2],
           team1: [t2p1, t2p2],
+          slots: {
+            team0: [
+              t1p1 ? { userId: null, name: t1p1 } : null,
+              t1p2 ? { userId: null, name: t1p2 } : null,
+            ],
+            team1: [
+              t2p1 ? { userId: null, name: t2p1 } : null,
+              t2p2 ? { userId: null, name: t2p2 } : null,
+            ],
+          },
+          umpireName: umpireDisplayName,
+          lobbyLocked: isFullyFilled,
         };
 
         const initialState = {
@@ -401,7 +417,7 @@ export default function MatchesPage() {
           p_initial_state: initialState,
           p_timer_duration_ms: 1800000,
           p_legacy_log: null,
-          p_auto_start_timer: true,
+          p_auto_start_timer: isFullyFilled,
         });
 
         if (error) {
@@ -506,7 +522,7 @@ export default function MatchesPage() {
                 <div className="flex flex-col gap-4 animate-in fade-in duration-200">
                   <div className="p-3 bg-[#EAF0E5]/70 rounded-xl border border-[#E2E5DC] flex items-center gap-2 text-xs text-[#203F39]">
                     <User size={15} className="text-[#0F5C62] shrink-0" />
-                    <span>Singles registration: Enter both player names. No team name required.</span>
+                    <span>Singles registration: Enter player names or leave blank for court QR scan.</span>
                   </div>
 
                   {/* Player 1 */}
@@ -515,12 +531,12 @@ export default function MatchesPage() {
                       htmlFor="singles-player-1"
                       className="text-xs font-bold text-[#084B46]"
                     >
-                      Player 1 Name <span className="text-[#0F5C62]">*</span>
+                      Player 1 Name <span className="text-xs font-normal text-[#748079]">(Optional for QR)</span>
                     </label>
                     <input
                       id="singles-player-1"
                       type="text"
-                      placeholder="e.g. Alex Morgan"
+                      placeholder="Optional — leave blank for QR scan"
                       value={player1Name}
                       onChange={(e) => setPlayer1Name(e.target.value)}
                       className="h-11 rounded-xl bg-[#FAF9F5] border-[1.5px] border-[#E2E5DC] px-4 text-sm font-medium text-[#084B46] placeholder:text-[#748079] focus:border-[#0F5C62] focus:outline-none focus:ring-2 focus:ring-[#0F5C62]/20"
@@ -533,12 +549,12 @@ export default function MatchesPage() {
                       htmlFor="singles-player-2"
                       className="text-xs font-bold text-[#084B46]"
                     >
-                      Player 2 Name <span className="text-[#0F5C62]">*</span>
+                      Player 2 Name <span className="text-xs font-normal text-[#748079]">(Optional for QR)</span>
                     </label>
                     <input
                       id="singles-player-2"
                       type="text"
-                      placeholder="e.g. Jordan Vance"
+                      placeholder="Optional — leave blank for QR scan"
                       value={player2Name}
                       onChange={(e) => setPlayer2Name(e.target.value)}
                       className="h-11 rounded-xl bg-[#FAF9F5] border-[1.5px] border-[#E2E5DC] px-4 text-sm font-medium text-[#084B46] placeholder:text-[#748079] focus:border-[#0F5C62] focus:outline-none focus:ring-2 focus:ring-[#0F5C62]/20"
@@ -602,7 +618,7 @@ export default function MatchesPage() {
                 <div className="flex flex-col gap-4 animate-in fade-in duration-200">
                   <div className="p-3 bg-[#EAF0E5]/70 rounded-xl border border-[#E2E5DC] flex items-center gap-2 text-xs text-[#203F39]">
                     <Users size={15} className="text-[#0F5C62] shrink-0" />
-                    <span>Doubles registration: Register both team names and two players per team.</span>
+                    <span>Doubles registration: Defaults to Team A vs. Team B. Enter names or leave blank for QR scan.</span>
                   </div>
 
                   {/* Team 1 Registration */}
@@ -612,12 +628,12 @@ export default function MatchesPage() {
                     </div>
                     <div className="flex flex-col gap-1">
                       <label htmlFor="team1-name" className="text-xs font-semibold text-[#203F39]">
-                        Team 1 Name <span className="text-[#0F5C62]">*</span>
+                        Team 1 Name
                       </label>
                       <input
                         id="team1-name"
                         type="text"
-                        placeholder="e.g. Apex Smashers"
+                        placeholder="e.g. Team A"
                         value={team1Name}
                         onChange={(e) => setTeam1Name(e.target.value)}
                         className="h-10 rounded-lg bg-[#FEFEFB] border border-[#E2E5DC] px-3 text-sm font-medium text-[#084B46] placeholder:text-[#748079] focus:border-[#0F5C62] focus:outline-none"
@@ -626,12 +642,12 @@ export default function MatchesPage() {
                     <div className="grid grid-cols-2 gap-2">
                       <div className="flex flex-col gap-1">
                         <label htmlFor="team1-p1" className="text-[11px] font-semibold text-[#748079]">
-                          Player 1 <span className="text-[#0F5C62]">*</span>
+                          Player 1 (Optional)
                         </label>
                         <input
                           id="team1-p1"
                           type="text"
-                          placeholder="Player A"
+                          placeholder="Optional — QR scan"
                           value={team1Player1}
                           onChange={(e) => setTeam1Player1(e.target.value)}
                           className="h-9 rounded-lg bg-[#FEFEFB] border border-[#E2E5DC] px-2.5 text-xs font-medium text-[#084B46] placeholder:text-[#748079] focus:border-[#0F5C62] focus:outline-none"
@@ -639,12 +655,12 @@ export default function MatchesPage() {
                       </div>
                       <div className="flex flex-col gap-1">
                         <label htmlFor="team1-p2" className="text-[11px] font-semibold text-[#748079]">
-                          Player 2 <span className="text-[#0F5C62]">*</span>
+                          Player 2 (Optional)
                         </label>
                         <input
                           id="team1-p2"
                           type="text"
-                          placeholder="Player B"
+                          placeholder="Optional — QR scan"
                           value={team1Player2}
                           onChange={(e) => setTeam1Player2(e.target.value)}
                           className="h-9 rounded-lg bg-[#FEFEFB] border border-[#E2E5DC] px-2.5 text-xs font-medium text-[#084B46] placeholder:text-[#748079] focus:border-[#0F5C62] focus:outline-none"
@@ -660,12 +676,12 @@ export default function MatchesPage() {
                     </div>
                     <div className="flex flex-col gap-1">
                       <label htmlFor="team2-name" className="text-xs font-semibold text-[#203F39]">
-                        Team 2 Name <span className="text-[#0F5C62]">*</span>
+                        Team 2 Name
                       </label>
                       <input
                         id="team2-name"
                         type="text"
-                        placeholder="e.g. Baseline Titans"
+                        placeholder="e.g. Team B"
                         value={team2Name}
                         onChange={(e) => setTeam2Name(e.target.value)}
                         className="h-10 rounded-lg bg-[#FEFEFB] border border-[#E2E5DC] px-3 text-sm font-medium text-[#084B46] placeholder:text-[#748079] focus:border-[#0F5C62] focus:outline-none"
@@ -674,12 +690,12 @@ export default function MatchesPage() {
                     <div className="grid grid-cols-2 gap-2">
                       <div className="flex flex-col gap-1">
                         <label htmlFor="team2-p1" className="text-[11px] font-semibold text-[#748079]">
-                          Player 1 <span className="text-[#0F5C62]">*</span>
+                          Player 1 (Optional)
                         </label>
                         <input
                           id="team2-p1"
                           type="text"
-                          placeholder="Player C"
+                          placeholder="Optional — QR scan"
                           value={team2Player1}
                           onChange={(e) => setTeam2Player1(e.target.value)}
                           className="h-9 rounded-lg bg-[#FEFEFB] border border-[#E2E5DC] px-2.5 text-xs font-medium text-[#084B46] placeholder:text-[#748079] focus:border-[#0F5C62] focus:outline-none"
@@ -687,12 +703,12 @@ export default function MatchesPage() {
                       </div>
                       <div className="flex flex-col gap-1">
                         <label htmlFor="team2-p2" className="text-[11px] font-semibold text-[#748079]">
-                          Player 2 <span className="text-[#0F5C62]">*</span>
+                          Player 2 (Optional)
                         </label>
                         <input
                           id="team2-p2"
                           type="text"
-                          placeholder="Player D"
+                          placeholder="Optional — QR scan"
                           value={team2Player2}
                           onChange={(e) => setTeam2Player2(e.target.value)}
                           className="h-9 rounded-lg bg-[#FEFEFB] border border-[#E2E5DC] px-2.5 text-xs font-medium text-[#084B46] placeholder:text-[#748079] focus:border-[#0F5C62] focus:outline-none"
@@ -782,14 +798,34 @@ export default function MatchesPage() {
               )}
 
               {/* Submit CTA */}
-              <button
-                type="submit"
-                disabled={!format || isSubmitting}
-                className="mt-2 h-13 w-full flex items-center justify-center gap-2.5 rounded-full bg-[#0F5C62] hover:bg-[#085953] active:translate-y-[1px] text-[#FEECD6] text-[16px] font-bold shadow-[0_10px_24px_-10px_rgba(15,92,98,0.5)] transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F5C62]"
-              >
-                <Play size={18} fill="currentColor" />
-                <span>{isSubmitting ? 'Starting Match...' : 'Start Match on Scoreboard'}</span>
-              </button>
+              {(() => {
+                const isFormComplete =
+                  format === 'singles'
+                    ? Boolean(player1Name.trim() && player2Name.trim())
+                    : Boolean(
+                        team1Player1.trim() &&
+                          team1Player2.trim() &&
+                          team2Player1.trim() &&
+                          team2Player2.trim()
+                      );
+
+                return (
+                  <button
+                    type="submit"
+                    disabled={!format || isSubmitting}
+                    className="mt-2 h-13 w-full flex items-center justify-center gap-2.5 rounded-full bg-[#0F5C62] hover:bg-[#085953] active:translate-y-[1px] text-[#FEECD6] text-[16px] font-bold shadow-[0_10px_24px_-10px_rgba(15,92,98,0.5)] transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F5C62]"
+                  >
+                    <Play size={18} fill="currentColor" />
+                    <span>
+                      {isSubmitting
+                        ? 'Opening Match...'
+                        : isFormComplete
+                        ? 'Start Match on Scoreboard'
+                        : 'Open Court & Show QR Code'}
+                    </span>
+                  </button>
+                );
+              })()}
             </form>
           </section>
 

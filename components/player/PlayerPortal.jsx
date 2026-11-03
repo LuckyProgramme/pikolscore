@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
+import { useRouter } from 'next/navigation';
 import { Outfit } from 'next/font/google';
 import {
   Camera,
@@ -59,9 +60,11 @@ function formatBytes(bytes) {
 }
 
 export default function PlayerPortal() {
+  const router = useRouter();
   const [loadingInitial, setLoadingInitial] = useState(true);
   const [session, setSession] = useState(null);
   const [profile, setProfile] = useState(null);
+  const [sessionParam, setSessionParam] = useState(null);
 
   // Auth form state (unauthenticated)
   const [authMode, setAuthMode] = useState('signin'); // 'signin' | 'signup'
@@ -91,6 +94,8 @@ export default function PlayerPortal() {
   // 1. Initial Session & Profile Loader
   useEffect(() => {
     let isMounted = true;
+    const search = typeof window !== 'undefined' ? window.location.search : '';
+    setSessionParam(new URLSearchParams(search).get('session') || null);
 
     async function loadUserSession() {
       try {
@@ -177,6 +182,16 @@ export default function PlayerPortal() {
 
       setProfile(currentProfile);
 
+      // If arriving from a court QR scan (?session=<id>), jump directly to the live match
+      const scannedSession =
+        typeof window !== 'undefined'
+          ? new URLSearchParams(window.location.search).get('session')
+          : null;
+      if (scannedSession) {
+        router.replace(`/pikolscore?session=${encodeURIComponent(scannedSession)}`);
+        return;
+      }
+
       // Populate form fields
       setFullName(
         currentProfile?.full_name ||
@@ -229,6 +244,10 @@ export default function PlayerPortal() {
   }
 
   // 3. Unauthenticated Actions (Sign In / Sign Up / Google OAuth / Forgot Password)
+  const sessionSuffix = sessionParam
+    ? `?session=${encodeURIComponent(sessionParam)}`
+    : '';
+
   const handleGoogleSignIn = async () => {
     setAuthError('');
     setAuthSuccess('');
@@ -236,7 +255,7 @@ export default function PlayerPortal() {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: `${window.location.origin}/player`,
+          redirectTo: `${window.location.origin}/player${sessionSuffix}`,
         },
       });
       if (error) {
@@ -284,7 +303,7 @@ export default function PlayerPortal() {
               full_name: trimmedName,
               role: 'player',
             },
-            emailRedirectTo: `${window.location.origin}/player`,
+            emailRedirectTo: `${window.location.origin}/player${sessionSuffix}`,
           },
         });
 
@@ -585,8 +604,8 @@ export default function PlayerPortal() {
           {/* Top Brand & Badge */}
           <div className="flex items-center justify-between mb-6">
             <Link
-              href="/"
-              aria-label="PikolScore home"
+              href={`/role${sessionSuffix}`}
+              aria-label="PikolScore role selection"
               className="flex items-center gap-3 text-[24px] font-bold tracking-[-0.01em] text-dark-teal no-underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal"
             >
               <svg width="36" height="36" viewBox="0 0 40 40" aria-hidden="true">
@@ -598,9 +617,17 @@ export default function PlayerPortal() {
               </svg>
               PikolScore
             </Link>
-            <span className="rounded-full bg-pale-sage px-3 py-1 text-[12px] font-semibold text-dark-teal border border-teal/20">
-              Player Portal
-            </span>
+            <div className="flex items-center gap-2.5">
+              <span className="rounded-full bg-pale-sage px-3 py-1 text-[12px] font-semibold text-dark-teal border border-teal/20">
+                Player Portal
+              </span>
+              <Link
+                href={`/role${sessionSuffix}`}
+                className="text-[12px] font-semibold text-teal no-underline hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal"
+              >
+                Switch role
+              </Link>
+            </div>
           </div>
 
           <h1 className="text-[24px] font-bold text-dark-teal m-0 mb-1">
@@ -817,7 +844,7 @@ export default function PlayerPortal() {
           <div className="mt-8 pt-5 border-t border-line text-center text-[13px] text-muted">
             Are you a match official?{' '}
             <Link
-              href="/umpire"
+              href={`/umpire${sessionSuffix}`}
               className="font-semibold text-teal no-underline hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal"
             >
               Go to umpire console

@@ -307,8 +307,11 @@ export function useMatchSync({ engineRef, timerRef, isGuest = false }) {
           : null;
       let discoveredSession = null;
 
-      // 2. Multi-device discovery ONLY for spectator/guest if no explicit session
-      if (!activeId && isGuest) {
+      // 2. Multi-device discovery ONLY for explicit ?demo=1 guest mode when no ?session is in URL
+      const isDemoMode =
+        typeof window !== 'undefined' &&
+        new URLSearchParams(window.location.search).get('demo') === '1';
+      if (!activeId && isGuest && isDemoMode) {
         try {
           const { data: publicActive } = await supabase
             .from('match_sessions')
@@ -341,11 +344,6 @@ export function useMatchSync({ engineRef, timerRef, isGuest = false }) {
           if (typeof window !== 'undefined') {
             window.localStorage.removeItem(ACTIVE_SESSION_KEY);
           }
-          setSessionId(null);
-          sessionIdRef.current = null;
-        } else if (user && !isGuest && res.session?.umpire_id && res.session.umpire_id !== user.id) {
-          // Umpire trying to open a session owned by another umpire
-          console.warn('[useMatchSync] Session belongs to a different umpire.');
           setSessionId(null);
           sessionIdRef.current = null;
         }

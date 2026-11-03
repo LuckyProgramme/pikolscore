@@ -15,20 +15,28 @@ import CallRow from './CallRow';
 import MatchLog from './MatchLog';
 import GameWonModal from './GameWonModal';
 import VoiceDebugOverlay from './VoiceDebugOverlay';
+import CourtQrLobbyModal from './CourtQrLobbyModal';
 import { VOICE_CONFIG } from '@/config/voice';
 import { supabase } from '@/config/supabase';
 import { PickleballEngine } from '@/lib/engine';
 import { getSynth } from '@/lib/audio';
+import {
+  resolveAuthenticatedDestination,
+  resolveSignedOutDestination,
+} from '@/lib/auth-session';
 
 export function Scoreboard() {
   const router = useRouter();
+  const [userId, setUserId] = useState(null);
   const [profile, setProfile] = useState(null);
   const [userEmail, setUserEmail] = useState(null);
   const [logOpen, setLogOpen] = useState(false);
   const [gameWonModalOpen, setGameWonModalOpen] = useState(false);
   const [isTimeExpired, setIsTimeExpired] = useState(false);
+  const [qrModalExplicitOpen, setQrModalExplicitOpen] = useState(false);
+  const [umpireDismissedLobby, setUmpireDismissedLobby] = useState(false);
 
-  // 1. Detect Guest State (isGuest)
+  // 1. Detect Viewer / Guest State (isGuest disables officiating controls)
   const [isGuest, setIsGuest] = useState(() => {
     if (typeof window !== 'undefined') {
       const search = new URLSearchParams(window.location.search);
@@ -49,43 +57,98 @@ export function Scoreboard() {
   });
 
   useEffect(() => {
-    async function checkAuthAndProfile() {
-      try {
-        const isDemo =
-          typeof window !== 'undefined' &&
-          new URLSearchParams(window.location.search).get('demo') === '1';
+    let isMounted = true;
 
+    async function checkAuthAndProfile() {
+      const search =
+        typeof window !== 'undefined'
+          ? new URLSearchParams(window.location.search)
+          : new URLSearchParams();
+      const isDemo = search.get('demo') === '1';
+      const sessionParam = search.get('session') || null;
+
+      if (isDemo) {
+        if (isMounted) setIsGuest(true);
+        return;
+      }
+
+      try {
         const {
           data: { session },
         } = await supabase.auth.getSession();
 
-        if (isDemo || !session?.user) {
-          setIsGuest(true);
+        if (!isMounted) return;
+
+        // Signed-out scan or visit without ?demo=1: route through role/portal login preserving ?session
+        if (!session?.user) {
+          router.replace(resolveSignedOutDestination(sessionParam));
           return;
         }
 
-        setIsGuest(false);
         const user = session.user;
+        setUserId(user.id);
         setUserEmail(user.email || null);
+
         const { data } = await supabase
           .from('profiles')
           .select('*')
           .eq('id', user.id)
-          .single();
+          .maybeSingle();
+
+        if (!isMounted) return;
+
         if (data) {
+          setProfile(data);
+
           if (data.role === 'player') {
-            router.replace('/player');
+            if (!sessionParam) {
+              router.replace('/player');
+              return;
+            }
+            // Signed-in Player viewing an active match via ?session=<id> QR scan (read-only viewer)
+            setIsGuest(true);
             return;
           }
-          setProfile(data);
         }
+
+        // Signed-in Umpire visiting bare /pikolscore without ?session=<id>: run Smart Resume
+        if (!sessionParam) {
+          const dest = await resolveAuthenticatedDestination(supabase, user.id);
+          if (isMounted) router.replace(dest);
+          return;
+        }
+
+        setIsGuest(false);
       } catch {
-        // Fallback to guest if offline or session unavailable
-        setIsGuest(true);
+        // Fallback to viewer mode if offline
+        if (isMounted) setIsGuest(true);
       }
     }
+
     checkAuthAndProfile();
+
+    return () => {
+      isMounted = false;
+    };
   }, [router]);
+
+  // If a signed-in umpire scans a match owned by a different umpire, switch to read-only viewer mode
+  useEffect(() => {
+    if (
+      userId &&
+      profile?.role !== 'player' &&
+      sync?.serverSession?.umpire_id &&
+      sync.serverSession.umpire_id !== userId
+    ) {
+      setIsGuest(true);
+    }
+  }, [userId, profile?.role, sync?.serverSession?.umpire_id]);
+
+  const isOwningUmpire = Boolean(
+    userId &&
+      sync?.serverSession?.umpire_id &&
+      sync.serverSession.umpire_id === userId
+  );
 
   const handleTimerExpireRef = useRef(null);
   const isTransitioningMatchRef = useRef(false);
@@ -319,7 +382,7 @@ export function Scoreboard() {
 
   return (
     <div className="ps-shell">
-      {/* 1. Subtle Spectator Mode Top Banner */}
+      {/* 1. Subtle Spectator / Player Viewer Top Banner */}
       {isGuest && (
         <div
           role="status"
@@ -327,7 +390,11 @@ export function Scoreboard() {
           className="flex items-center justify-center gap-2 bg-[#FAF9F5] border-b border-[#E2E5DC] px-4 py-2 text-center text-[13px] font-semibold text-[#084B46] tracking-wide"
         >
           <Eye size={15} className="text-[#0F5C62] shrink-0" aria-hidden="true" />
-          <span>Spectator Mode (Read-Only) — Sign out to log in as an official umpire.</span>
+          <span>
+            {profile?.role === 'player'
+              ? `Live Court Session — Connected as ${profile.full_name || userEmail || 'Player'}`
+              : 'Spectator Mode (Read-Only) — Sign out to log in as an official umpire.'}
+          </span>
         </div>
       )}
 
@@ -355,7 +422,16 @@ export function Scoreboard() {
 
       {/* 3. Header remains outside the disabled/inert wrapper */}
       <Header
-        onBack={!isGuest ? () => router.push('/matches') : undefined}
+        onBack={
+          profile
+            ? () =>
+                router.push(profile.role === 'player' ? '/player' : '/matches')
+            : !isGuest
+            ? () => router.push('/matches')
+            : undefined
+        }
+        backLabel={profile?.role === 'player' ? 'Profile' : 'Matches'}
+        onOpenQrModal={sync?.sessionId ? () => setQrModalExplicitOpen(true) : undefined}
         onOpenLog={() => !isGuest && setLogOpen(true)}
         profile={profile}
         userEmail={userEmail}
@@ -473,6 +549,28 @@ export function Scoreboard() {
           onGoToMatches={handleGoToMatches}
           onClose={handleCloseGameWon}
         />
+
+        {/* 5. Court QR & Pre-Match Lobby Modal */}
+        {sync?.serverSession && (
+          <CourtQrLobbyModal
+            isOpen={Boolean(
+              qrModalExplicitOpen ||
+                (sync.serverSession.player_names?.lobbyLocked === false &&
+                  (!isOwningUmpire || !umpireDismissedLobby))
+            )}
+            onClose={() => {
+              setQrModalExplicitOpen(false);
+              setUmpireDismissedLobby(true);
+            }}
+            session={sync.serverSession}
+            currentUser={{ id: userId, email: userEmail }}
+            profile={profile}
+            isUmpire={isOwningUmpire}
+            onSessionUpdated={(updated) => {
+              sync.refetchAndRehydrate(updated);
+            }}
+          />
+        )}
       </div>
     </div>
   );

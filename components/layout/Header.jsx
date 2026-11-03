@@ -2,7 +2,7 @@
 
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { LogOut, User, Cloud, CloudOff, RefreshCw, CheckCircle2, ArrowLeft } from 'lucide-react';
+import { LogOut, User, Cloud, CloudOff, RefreshCw, CheckCircle2, ArrowLeft, QrCode } from 'lucide-react';
 import { supabase } from '@/config/supabase';
 import {
   saveAccountForQuickSwitch,
@@ -11,7 +11,9 @@ import {
 
 export function Header({
   onOpenLog,
+  onOpenQrModal,
   onBack,
+  backLabel = 'Matches',
   showMatchLog = true,
   profile,
   userEmail,
@@ -23,6 +25,7 @@ export function Header({
   ...rest
 }) {
   const router = useRouter();
+  const isPlayerProfile = profile?.role === 'player';
 
   // 1. Cross-Tab Logout Synchronization Listener
   useEffect(() => {
@@ -31,22 +34,22 @@ export function Header({
         event.key?.startsWith('sb-') && event.key?.endsWith('-auth-token');
 
       if (isSupabaseToken && event.newValue === null) {
-        window.location.replace('/umpire');
+        window.location.replace(isPlayerProfile ? '/player' : '/umpire');
       }
     };
 
     window.addEventListener('storage', handleCrossTabLogout);
     return () => window.removeEventListener('storage', handleCrossTabLogout);
-  }, []);
+  }, [isPlayerProfile]);
 
-  const isGuestSpectator =
-    Boolean(isGuest) ||
-    (typeof window !== 'undefined' &&
-      new URLSearchParams(window.location.search).get('demo') === '1');
+  const isDemoSpectator =
+    typeof window !== 'undefined' &&
+    new URLSearchParams(window.location.search).get('demo') === '1';
+  const isGuestSpectator = Boolean(isGuest) && !profile;
 
   // 2. Soft Logout + In-Memory Purge & Hard Redirect
   const handleLogout = async () => {
-    if (isGuestSpectator) {
+    if (isDemoSpectator || isGuestSpectator) {
       if (typeof onLogout === 'function') {
         try {
           onLogout();
@@ -54,7 +57,18 @@ export function Header({
           console.error('onLogout callback error:', e);
         }
       }
-      window.location.replace('/umpire');
+      window.location.replace('/role');
+      return;
+    }
+
+    if (isPlayerProfile) {
+      try {
+        await supabase.auth.signOut();
+      } catch (err) {
+        console.error('Player sign out error:', err);
+      } finally {
+        window.location.replace('/player');
+      }
       return;
     }
 
@@ -101,11 +115,11 @@ export function Header({
             type="button"
             onClick={onBack}
             className="ps-pill ps-pill-back flex items-center gap-1.5 px-3 py-1.5 text-sm font-semibold text-deep-green hover:bg-pale-sage transition-colors"
-            aria-label="Back to matches"
-            title="Back to Match Hub"
+            aria-label={`Back to ${backLabel}`}
+            title={`Back to ${backLabel}`}
           >
             <ArrowLeft size={16} aria-hidden="true" />
-            <span className="hidden sm:inline">Matches</span>
+            <span className="hidden sm:inline">{backLabel}</span>
           </button>
         )}
         <div className="ps-logo">
@@ -160,6 +174,19 @@ export function Header({
               </>
             )}
           </div>
+        )}
+
+        {onOpenQrModal && (
+          <button
+            type="button"
+            className="ps-pill flex items-center gap-1.5"
+            onClick={onOpenQrModal}
+            title="Show Court QR Code"
+            aria-label="Court QR Code"
+          >
+            <QrCode size={14} aria-hidden="true" />
+            <span>Court QR</span>
+          </button>
         )}
 
         {showMatchLog && (

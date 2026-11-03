@@ -9,6 +9,7 @@ import { AUTH_CONTENT } from '@/config/content/auth';
 import {
   getValidSavedAccounts,
   removeSavedAccount,
+  resolveAuthenticatedDestination,
   SEVEN_DAYS_MS,
 } from '@/lib/auth-session';
 
@@ -57,6 +58,7 @@ export function LoginForm({ initialMode = 'signin' }) {
   const [savedAccounts, setSavedAccounts] = useState([]);
   const [isSwitching, setIsSwitching] = useState(false);
   const [switchingUserId, setSwitchingUserId] = useState(null);
+  const [sessionParam, setSessionParam] = useState(null);
   const passwordInputRef = useRef(null);
 
   const [nameError, setNameError] = useState('');
@@ -70,8 +72,36 @@ export function LoginForm({ initialMode = 'signin' }) {
   const { fields } = AUTH_CONTENT;
 
   useEffect(() => {
+    let isMounted = true;
+    const search = typeof window !== 'undefined' ? window.location.search : '';
+    const scannedSession = new URLSearchParams(search).get('session') || null;
+    setSessionParam(scannedSession);
     setSavedAccounts(getValidSavedAccounts());
-  }, []);
+
+    async function checkExistingSession() {
+      try {
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+
+        if (!isMounted || !session?.user) return;
+        const dest = await resolveAuthenticatedDestination(
+          supabase,
+          session.user.id,
+          scannedSession
+        );
+        if (isMounted) router.replace(dest);
+      } catch (err) {
+        console.error('Error checking existing umpire session:', err);
+      }
+    }
+
+    checkExistingSession();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [router]);
 
   const clearFeedback = () => {
     setNameError('');
@@ -148,7 +178,12 @@ export function LoginForm({ initialMode = 'signin' }) {
       }
 
       removeSavedAccount(account.userId);
-      router.replace('/matches');
+      const dest = await resolveAuthenticatedDestination(
+        supabase,
+        userId,
+        sessionParam
+      );
+      router.replace(dest);
     } catch (err) {
       console.error('Quick login failed:', err);
       handleExpiredFallback(account);
@@ -281,6 +316,7 @@ export function LoginForm({ initialMode = 'signin' }) {
         }
 
         if (data?.session) {
+          let dest = '/matches';
           if (data.session.user) {
             try {
               await supabase
@@ -291,8 +327,13 @@ export function LoginForm({ initialMode = 'signin' }) {
               console.warn('Failed to stamp last_active_at on signup:', stampErr);
             }
             removeSavedAccount(data.session.user.id);
+            dest = await resolveAuthenticatedDestination(
+              supabase,
+              data.session.user.id,
+              sessionParam
+            );
           }
-          router.push('/matches');
+          router.push(dest);
           return;
         }
 
@@ -341,6 +382,13 @@ export function LoginForm({ initialMode = 'signin' }) {
           console.warn('Failed to stamp last_active_at on login:', stampErr);
         }
         removeSavedAccount(data.session.user.id);
+        const dest = await resolveAuthenticatedDestination(
+          supabase,
+          data.session.user.id,
+          sessionParam
+        );
+        router.push(dest);
+        return;
       }
 
       router.push('/matches');
@@ -352,12 +400,16 @@ export function LoginForm({ initialMode = 'signin' }) {
     }
   };
 
+  const sessionSuffix = sessionParam
+    ? `?session=${encodeURIComponent(sessionParam)}`
+    : '';
+
   return (
     <section className="relative flex flex-col items-center bg-pale-sage px-8 pt-10 pb-10">
       <div className="mb-6 ml-6 flex items-center justify-between self-start w-[calc(100%-1.5rem)]">
         <Link
-          href="/"
-          aria-label="PikolScore home"
+          href={`/role${sessionSuffix}`}
+          aria-label="PikolScore role selection"
           className="flex items-center gap-3 text-[26px] font-bold tracking-[-0.01em] text-dark-teal no-underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal"
         >
           <svg width="40" height="40" viewBox="0 0 40 40" aria-hidden="true">
@@ -369,9 +421,17 @@ export function LoginForm({ initialMode = 'signin' }) {
           </svg>
           {AUTH_CONTENT.brand}
         </Link>
-        <span className="rounded-full bg-teal/10 px-3 py-1 text-[12px] font-semibold text-dark-teal border border-teal/20">
-          Umpire Console
-        </span>
+        <div className="flex items-center gap-2.5">
+          <span className="rounded-full bg-teal/10 px-3 py-1 text-[12px] font-semibold text-dark-teal border border-teal/20">
+            Umpire Console
+          </span>
+          <Link
+            href={`/role${sessionSuffix}`}
+            className="text-[12px] font-semibold text-teal no-underline hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal"
+          >
+            Switch role
+          </Link>
+        </div>
       </div>
 
       <form
@@ -756,7 +816,7 @@ export function LoginForm({ initialMode = 'signin' }) {
         <p className="mt-3 text-center text-[13px] text-muted">
           Are you a player?{' '}
           <Link
-            href="/player"
+            href={`/player${sessionSuffix}`}
             className="font-semibold text-teal no-underline hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal"
           >
             Sign in to player portal
