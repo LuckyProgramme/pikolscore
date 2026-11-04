@@ -23,6 +23,7 @@ import {
   RotateCcw,
   Sparkles,
   LayoutGrid,
+  Tv,
 } from 'lucide-react';
 import { supabase } from '@/config/supabase';
 import AuthLoadingSplash from '@/components/auth/AuthLoadingSplash';
@@ -822,182 +823,7 @@ export default function PlayerPortal() {
   }
 
   // =========================================================================
-  // MODE 1: PLAYER LIVE SCORING VIEW (Fixed Position: My Team : Opponent : Server #)
-  // =========================================================================
-  if (myStartedMatch) {
-    const { session: liveSession, myTeamIndex, courtNumber } = myStartedMatch;
-    const opponentTeamIndex = 1 - myTeamIndex;
-
-    const tNames = liveSession.team_names || ['Team A', 'Team B'];
-    const myTeamName = tNames[myTeamIndex] || (myTeamIndex === 0 ? 'Team A' : 'Team B');
-    const oppTeamName = tNames[opponentTeamIndex] || (opponentTeamIndex === 0 ? 'Team A' : 'Team B');
-
-    const myScore = myTeamIndex === 0 ? (liveSession.score_team0 ?? 0) : (liveSession.score_team1 ?? 0);
-    const oppScore = opponentTeamIndex === 0 ? (liveSession.score_team0 ?? 0) : (liveSession.score_team1 ?? 0);
-
-    const isMyTeamServing = liveSession.serving_team === myTeamIndex;
-    const serverNum = liveSession.server_number ?? 2;
-
-    // Padded 2-digit scores
-    const myPadded = String(myScore).padStart(2, '0');
-    const oppPadded = String(oppScore).padStart(2, '0');
-
-    // Live countdown timer
-    let timerText = '30:00';
-    if (liveSession.timer_ends_at) {
-      const remMs = Math.max(0, new Date(liveSession.timer_ends_at).getTime() - Date.now());
-      timerText = formatMmSs(Math.ceil(remMs / 1000));
-    }
-
-    return (
-      <div className={`${outfit.className} min-h-screen bg-[#FAF9F5] text-[#203F39] flex flex-col`}>
-        {/* Top Minimal Header: Logo + Player Identity + Sign out only */}
-        <header className="h-16 px-4 sm:px-8 bg-[#FEFEFB] border-b border-[#E2E5DC] flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <svg width="32" height="32" viewBox="0 0 40 40">
-              <rect width="40" height="40" rx="10" fill="#0F5C62" />
-              <circle cx="20" cy="20" r="8" fill="#FEECD6" />
-              <circle cx="17" cy="17" r="1.3" fill="#084B46" />
-              <circle cx="23" cy="19" r="1.3" fill="#084B46" />
-              <circle cx="19" cy="23" r="1.3" fill="#084B46" />
-            </svg>
-            <span className="text-xl font-black text-[#084B46] tracking-tight">PIKOLSCORE</span>
-            <span className="ml-2 rounded-full bg-[#EAF0E5] px-2.5 py-0.5 text-xs font-bold text-[#0F5C62] border border-[#E2E5DC]">
-              Court {courtNumber}
-            </span>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#FAF9F5] border border-[#E2E5DC] text-xs font-semibold text-[#084B46]">
-              <User size={13} />
-              <span>{profile?.full_name || 'Player'}</span>
-            </div>
-            <button
-              type="button"
-              onClick={handleSignOut}
-              className="p-2 text-[#748079] hover:text-[#BA1A1A] rounded-full hover:bg-[#EAF0E5] transition-colors border-0 bg-transparent cursor-pointer"
-              title="Sign out"
-            >
-              <LogOut size={16} />
-            </button>
-          </div>
-        </header>
-
-        {/* Live Match Centerpiece */}
-        <main className="flex-1 flex flex-col items-center justify-center p-4 sm:p-8 max-w-5xl mx-auto w-full">
-          {/* Match Countdown Timer Card */}
-          <div className="mb-6 flex items-center gap-2 px-5 py-2 rounded-full bg-[#EAF0E5] border border-[#E2E5DC] shadow-sm">
-            <Timer size={18} className="text-[#0F5C62]" />
-            <span className="font-mono text-xl sm:text-2xl font-black text-[#084B46] tracking-tight tabular-nums">
-              {timerText}
-            </span>
-            <span className="text-xs font-semibold text-[#748079] uppercase ml-1">
-              Match Countdown
-            </span>
-          </div>
-
-          {/* 3-CARD FIXED ROW: [My Team Score] : [Opponent Score] : [Server Number] */}
-          <div className="grid grid-cols-1 sm:grid-cols-12 gap-4 sm:gap-6 w-full items-stretch">
-            {/* 1. LEFT CARD: My Team (Fixed position, never swaps) */}
-            <div
-              className={`sm:col-span-5 rounded-[28px] p-5 sm:p-6 flex flex-col justify-between border-[2px] transition-all shadow-md ${
-                isMyTeamServing
-                  ? 'bg-[#EAF0E5] border-[#0F5C62] ring-2 ring-[#0F5C62]/20'
-                  : 'bg-[#FEFEFB] border-[#E2E5DC]'
-              }`}
-            >
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-2">
-                  <span className="font-extrabold text-lg sm:text-xl text-[#084B46] tracking-tight">
-                    {myTeamName}
-                  </span>
-                  <span className="text-[11px] font-bold uppercase tracking-wider text-[#0F5C62] bg-white/70 px-2 py-0.5 rounded-full border border-[#E2E5DC]">
-                    Your Team
-                  </span>
-                </div>
-                <span
-                  className={`text-xs font-bold uppercase tracking-widest px-2.5 py-1 rounded-full ${
-                    isMyTeamServing
-                      ? 'bg-[#0F5C62] text-[#FEECD6]'
-                      : 'bg-[#E2E5DC] text-[#748079]'
-                  }`}
-                >
-                  {isMyTeamServing ? 'Serving' : 'Receiving'}
-                </span>
-              </div>
-
-              {/* Digits Pair */}
-              <div className="flex gap-3 justify-center items-center py-2">
-                <FlipDigit value={myPadded[0]} />
-                <FlipDigit value={myPadded[1]} />
-              </div>
-
-              <div className="mt-4 text-center text-xs font-semibold text-[#748079]">
-                {isMyTeamServing ? 'Your side has the serve' : 'Defending / Receiving'}
-              </div>
-            </div>
-
-            {/* 2. CENTER CARD: Opponent Team (Fixed position, never swaps) */}
-            <div
-              className={`sm:col-span-5 rounded-[28px] p-5 sm:p-6 flex flex-col justify-between border-[2px] transition-all shadow-md ${
-                !isMyTeamServing
-                  ? 'bg-[#EAF0E5] border-[#0F5C62] ring-2 ring-[#0F5C62]/20'
-                  : 'bg-[#FEFEFB] border-[#E2E5DC]'
-              }`}
-            >
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-2">
-                  <span className="font-extrabold text-lg sm:text-xl text-[#084B46] tracking-tight">
-                    {oppTeamName}
-                  </span>
-                  <span className="text-[11px] font-bold uppercase tracking-wider text-[#748079] bg-white/70 px-2 py-0.5 rounded-full border border-[#E2E5DC]">
-                    Opponent
-                  </span>
-                </div>
-                <span
-                  className={`text-xs font-bold uppercase tracking-widest px-2.5 py-1 rounded-full ${
-                    !isMyTeamServing
-                      ? 'bg-[#0F5C62] text-[#FEECD6]'
-                      : 'bg-[#E2E5DC] text-[#748079]'
-                  }`}
-                >
-                  {!isMyTeamServing ? 'Serving' : 'Receiving'}
-                </span>
-              </div>
-
-              {/* Digits Pair */}
-              <div className="flex gap-3 justify-center items-center py-2">
-                <FlipDigit value={oppPadded[0]} />
-                <FlipDigit value={oppPadded[1]} />
-              </div>
-
-              <div className="mt-4 text-center text-xs font-semibold text-[#748079]">
-                {!isMyTeamServing ? 'Opponent is serving' : 'Opponent is receiving'}
-              </div>
-            </div>
-
-            {/* 3. RIGHT CARD: Server Number */}
-            <div className="sm:col-span-2 rounded-[28px] p-5 sm:p-6 bg-[#085953] border-2 border-[#0F5C62] text-[#FEFEFB] flex flex-col justify-between items-center shadow-md">
-              <span className="text-xs font-bold uppercase tracking-widest text-[#FEECD6]">
-                Server
-              </span>
-
-              <div className="py-2">
-                <FlipDigit value={serverNum} className="ps-fd-sm" />
-              </div>
-
-              <span className="text-[11px] font-medium text-[#FEECD6]/80 text-center">
-                Server #{serverNum}
-              </span>
-            </div>
-          </div>
-        </main>
-      </div>
-    );
-  }
-
-  // =========================================================================
-  // MODE 2: LOBBY & COURT BROWSER + PROFILE EDITOR
+  // LOBBY & COURT BROWSER + PROFILE EDITOR (No live score on Player phone)
   // =========================================================================
   return (
     <div className={`${outfit.className} min-h-screen bg-[#FAF9F5] p-4 sm:p-8 font-outfit text-[#203F39]`}>
@@ -1057,6 +883,39 @@ export default function PlayerPortal() {
             </button>
           </div>
         </header>
+
+        {/* Active Match Status Banner (Directs Player to Courtside TV for Live Score) */}
+        {myStartedMatch && (
+          <div
+            role="status"
+            aria-live="polite"
+            className="mb-6 rounded-3xl bg-[#084B46] text-[#FEFEFB] p-5 sm:p-6 border-2 border-[#0F5C62] shadow-md flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+          >
+            <div className="flex items-center gap-3.5">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-[#0F5C62] text-[#FEECD6]">
+                <Tv size={24} />
+              </div>
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="rounded-full bg-[#FEECD6] px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wider text-[#084B46]">
+                    Court {myStartedMatch.courtNumber} · Active Match
+                  </span>
+                  <span className="text-xs font-semibold text-[#EAF0E5]">
+                    Playing on{' '}
+                    {myStartedMatch.session.team_names?.[myStartedMatch.myTeamIndex] ||
+                      (myStartedMatch.myTeamIndex === 0 ? 'Team A' : 'Team B')}
+                  </span>
+                </div>
+                <h2 className="text-lg font-bold text-white m-0 mt-1">
+                  You are in an active match on Court {myStartedMatch.courtNumber}
+                </h2>
+                <p className="text-xs text-[#EAF0E5]/85 m-0 mt-0.5">
+                  See the Courtside TV Screen for live scoring. Slot claiming on other courts is locked until your match ends.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Global Lobby Error */}
         {lobbyError && (
@@ -1161,7 +1020,13 @@ export default function PlayerPortal() {
                     {/* Team A vs Team B Slots */}
                     {isMatchInProgress ? (
                       <div className="p-4 rounded-2xl bg-[#FAF9F5] border border-[#E2E5DC] text-center text-xs text-[#748079]">
-                        This court is currently in a live match. Please join an open court lobby.
+                        {mySlotInfo ? (
+                          <span className="font-semibold text-[#084B46]">
+                            You are playing in this match ({mySlotInfo.team === 0 ? 'Team A' : 'Team B'}). Check the Courtside TV Screen for live scoring!
+                          </span>
+                        ) : (
+                          'This court is currently in a live match. Please join an open court lobby.'
+                        )}
                       </div>
                     ) : (
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -1196,7 +1061,7 @@ export default function PlayerPortal() {
                                         </span>
                                       )}
                                     </div>
-                                    {isMine && (
+                                    {isMine && !myStartedMatch && (
                                       <button
                                         type="button"
                                         onClick={() => handleLeaveSlot(courtNum)}
@@ -1211,8 +1076,8 @@ export default function PlayerPortal() {
                                   <button
                                     type="button"
                                     onClick={() => handleClaimSlot(courtNum, 0, sIdx)}
-                                    disabled={isLobbySubmitting}
-                                    className="w-full flex items-center justify-center gap-1 text-[#0F5C62] hover:bg-[#EAF0E5] py-1 rounded font-bold text-xs bg-transparent border-0 cursor-pointer"
+                                    disabled={isLobbySubmitting || Boolean(myStartedMatch)}
+                                    className="w-full flex items-center justify-center gap-1 text-[#0F5C62] hover:bg-[#EAF0E5] py-1 rounded font-bold text-xs bg-transparent border-0 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                                   >
                                     <Plus size={13} />
                                     <span>Join Slot {sIdx + 1}</span>
@@ -1254,7 +1119,7 @@ export default function PlayerPortal() {
                                         </span>
                                       )}
                                     </div>
-                                    {isMine && (
+                                    {isMine && !myStartedMatch && (
                                       <button
                                         type="button"
                                         onClick={() => handleLeaveSlot(courtNum)}
@@ -1269,8 +1134,8 @@ export default function PlayerPortal() {
                                   <button
                                     type="button"
                                     onClick={() => handleClaimSlot(courtNum, 1, sIdx)}
-                                    disabled={isLobbySubmitting}
-                                    className="w-full flex items-center justify-center gap-1 text-[#0F5C62] hover:bg-[#EAF0E5] py-1 rounded font-bold text-xs bg-transparent border-0 cursor-pointer"
+                                    disabled={isLobbySubmitting || Boolean(myStartedMatch)}
+                                    className="w-full flex items-center justify-center gap-1 text-[#0F5C62] hover:bg-[#EAF0E5] py-1 rounded font-bold text-xs bg-transparent border-0 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                                   >
                                     <Plus size={13} />
                                     <span>Join Slot {sIdx + 1}</span>

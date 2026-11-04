@@ -27,7 +27,8 @@ export default function RootPage() {
 
       const sessionParam = params.get('session') || null;
       const courtParam = params.get('court') || null;
-      const target = { sessionId: sessionParam, courtNumber: courtParam };
+      const tvParam = params.get('tv') || null;
+      const target = { sessionId: sessionParam, courtNumber: courtParam, tvId: tvParam };
 
       try {
         const {

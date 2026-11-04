@@ -2,7 +2,7 @@
 
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { LogOut, User, Cloud, CloudOff, RefreshCw, CheckCircle2, ArrowLeft, QrCode } from 'lucide-react';
+import { LogOut, User, Cloud, CloudOff, RefreshCw, CheckCircle2, ArrowLeft, QrCode, Tv } from 'lucide-react';
 import { supabase } from '@/config/supabase';
 import {
   saveAccountForQuickSwitch,
@@ -12,6 +12,7 @@ import {
 export function Header({
   onOpenLog,
   onOpenQrModal,
+  onOpenProjectModal,
   onBack,
   backLabel = 'Matches',
   showMatchLog = true,
@@ -175,6 +176,19 @@ export function Header({
               </>
             )}
           </div>
+        )}
+
+        {onOpenProjectModal && !isGuest && (
+          <button
+            type="button"
+            className="ps-pill flex items-center gap-1.5"
+            onClick={onOpenProjectModal}
+            title="Project this court to a TV Screen"
+            aria-label="Project to Screen"
+          >
+            <Tv size={14} aria-hidden="true" />
+            <span>Project to Screen</span>
+          </button>
         )}
 
         {onOpenQrModal && (

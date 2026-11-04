@@ -646,6 +646,182 @@ export async function POST(request) {
       return NextResponse.json({ success: true, session: updatedSession });
     }
 
+    // -------------------------------------------------------------
+    // ACTION: pair_tv
+    // Links a Courtside TV (tvId) to this court's active session
+    // -------------------------------------------------------------
+    if (action === 'pair_tv') {
+      const { tvId } = body;
+      if (!tvId || typeof tvId !== 'string') {
+        return NextResponse.json({ error: 'Valid tvId is required' }, { status: 400 });
+      }
+
+      const { data: profile } = await supabaseAdmin
+        .from('profiles')
+        .select('full_name, role')
+        .eq('id', user.id)
+        .maybeSingle();
+
+      if (profile?.role !== 'referee') {
+        return NextResponse.json(
+          { error: 'Only registered umpires can pair a courtside TV screen' },
+          { status: 403 }
+        );
+      }
+
+      // Remove tvId from any other active court session
+      const { data: allActive } = await supabaseAdmin
+        .from('match_sessions')
+        .select('id, umpire_id, player_names, version')
+        .eq('status', 'in_progress')
+        .neq('id', currentSessionId);
+
+      if (Array.isArray(allActive)) {
+        for (const sRow of allActive) {
+          const existingTvIds = sRow.player_names?.pairedTvIds;
+          if (Array.isArray(existingTvIds) && existingTvIds.includes(tvId)) {
+            const filtered = existingTvIds.filter((id) => id !== tvId);
+            await supabaseAdmin
+              .from('match_sessions')
+              .update({
+                player_names: {
+                  ...sRow.player_names,
+                  pairedTvIds: filtered,
+                },
+                version: (sRow.version || 0) + 1,
+                updated_at: new Date().toISOString(),
+              })
+              .eq('id', sRow.id);
+          }
+        }
+      }
+
+      // Check if caller is already assigned to another court
+      const otherCourtAssignment = (allActive || []).find(
+        (r) => getAssignedUmpireId(r) === user.id && getCourtNumber(r)
+      );
+
+      let nextUmpireId = assignedUmpireId;
+      let nextUmpireName = playerNames.umpireName || null;
+
+      // If this court has no umpire yet and the caller isn't on another court, assign them!
+      if (!assignedUmpireId && !otherCourtAssignment && !playerNames.lobbyLocked) {
+        nextUmpireId = user.id;
+        nextUmpireName =
+          profile?.full_name?.trim() ||
+          user.user_metadata?.full_name?.trim() ||
+          user.user_metadata?.name?.trim() ||
+          user.email?.split('@')[0] ||
+          'Official Umpire';
+      }
+
+      const prevTvIds = Array.isArray(playerNames.pairedTvIds)
+        ? playerNames.pairedTvIds
+        : [];
+      const nextTvIds = prevTvIds.includes(tvId) ? prevTvIds : [...prevTvIds, tvId];
+
+      const updatedPNames = {
+        ...playerNames,
+        courtNumber: resolvedCourtNumber,
+        umpireId: nextUmpireId,
+        umpireName: nextUmpireName,
+        pairedTvIds: nextTvIds,
+      };
+
+      const { data: updatedSession, error: updateErr } = await supabaseAdmin
+        .from('match_sessions')
+        .update({
+          umpire_id: nextUmpireId || session.umpire_id,
+          player_names: updatedPNames,
+          version: (session.version || 0) + 1,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', currentSessionId)
+        .select('*')
+        .single();
+
+      if (updateErr) {
+        return NextResponse.json({ error: updateErr.message }, { status: 500 });
+      }
+
+      return NextResponse.json({
+        success: true,
+        courtNumber: resolvedCourtNumber,
+        session: updatedSession,
+      });
+    }
+
+    // -------------------------------------------------------------
+    // ACTION: close_match
+    // Marks the court session as 'abandoned' or 'completed' and notifies
+    // any paired Courtside TV screens BEFORE RLS hides 'abandoned' rows
+    // -------------------------------------------------------------
+    if (action === 'close_match') {
+      if (!isUmpire && session.umpire_id !== user.id) {
+        return NextResponse.json(
+          { error: 'Only the officiating umpire can close this match' },
+          { status: 403 }
+        );
+      }
+
+      const closeReason =
+        body.reason === 'abandoned' ? 'abandoned' : 'completed';
+      const nowIso = new Date().toISOString();
+
+      const updatedPNames = {
+        ...playerNames,
+        courtNumber: resolvedCourtNumber,
+        tvClosedReason: closeReason,
+        tvClosedAt: nowIso,
+        pairedTvIds: [],
+      };
+
+      // Step 1: Update player_names while status is STILL 'in_progress' so
+      // anon TV clients receive the postgres_changes UPDATE event via RLS
+      await supabaseAdmin
+        .from('match_sessions')
+        .update({
+          player_names: updatedPNames,
+          version: (session.version || 0) + 1,
+          updated_at: nowIso,
+        })
+        .eq('id', currentSessionId);
+
+      // Step 2: Transition session status to 'abandoned' or 'completed'
+      const finalStatus =
+        closeReason === 'abandoned'
+          ? 'abandoned'
+          : session.winner_team !== null || closeReason === 'completed'
+          ? 'completed'
+          : closeReason;
+
+      const { data: closedSession, error: closeErr } = await supabaseAdmin
+        .from('match_sessions')
+        .update({
+          status: finalStatus,
+          player_names: updatedPNames,
+          completed_at: nowIso,
+          timer_status:
+            session.timer_status === 'running' ? 'paused' : session.timer_status,
+          version: (session.version || 0) + 2,
+          updated_at: nowIso,
+        })
+        .eq('id', currentSessionId)
+        .select('*')
+        .single();
+
+      if (closeErr) {
+        return NextResponse.json({ error: closeErr.message }, { status: 500 });
+      }
+
+      return NextResponse.json({
+        success: true,
+        courtNumber: resolvedCourtNumber,
+        reason: closeReason,
+        session: closedSession,
+      });
+    }
+
     return NextResponse.json({ error: 'Invalid action specified' }, { status: 400 });
   } catch (err) {
     console.error('[API /api/match/lobby] Error:', err);

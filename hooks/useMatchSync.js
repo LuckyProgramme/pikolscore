@@ -31,6 +31,10 @@ export function useMatchSync({ engineRef, timerRef, isGuest = false }) {
   const [toastMessage, setToastMessage] = useState(null);
   const [legacyLog, setLegacyLog] = useState([]);
   const [serverSession, setServerSession] = useState(null);
+  const lastPlayerNamesRef = useRef(null);
+  if (serverSession?.player_names) {
+    lastPlayerNamesRef.current = serverSession.player_names;
+  }
   const [isLoadingSession, setIsLoadingSession] = useState(true);
   const [rehydrateVersion, setRehydrateVersion] = useState(0);
 
@@ -421,7 +425,7 @@ export function useMatchSync({ engineRef, timerRef, isGuest = false }) {
       const teamKeys = engine.teamKeys || ['omega', 'alpha'];
       const teamNames = engine.teamNames || ['Team Omega', 'Team Alpha'];
       const teamPalettes = engine.teamPalettes || ['omega', 'alpha'];
-      const prevPNames = serverSession?.player_names || {};
+      const prevPNames = serverSession?.player_names || lastPlayerNamesRef.current || {};
       const basePNames = engine.playerNames || {
         team0: ['Player 1', 'Player 2'],
         team1: ['Player 3', 'Player 4'],
@@ -433,6 +437,9 @@ export function useMatchSync({ engineRef, timerRef, isGuest = false }) {
         ...(prevPNames.umpireId ? { umpireId: prevPNames.umpireId } : {}),
         ...(prevPNames.umpireName ? { umpireName: prevPNames.umpireName } : {}),
         ...(prevPNames.slots ? { slots: prevPNames.slots } : {}),
+        ...(Array.isArray(prevPNames.pairedTvIds)
+          ? { pairedTvIds: prevPNames.pairedTvIds }
+          : {}),
         lobbyLocked: true,
       };
 

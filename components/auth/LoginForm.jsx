@@ -60,6 +60,7 @@ export function LoginForm({ initialMode = 'signin' }) {
   const [switchingUserId, setSwitchingUserId] = useState(null);
   const [sessionParam, setSessionParam] = useState(null);
   const [courtParam, setCourtParam] = useState(null);
+  const [tvParam, setTvParam] = useState(null);
   const passwordInputRef = useRef(null);
 
   const [nameError, setNameError] = useState('');
@@ -78,8 +79,10 @@ export function LoginForm({ initialMode = 'signin' }) {
     const params = new URLSearchParams(search);
     const scannedSession = params.get('session') || null;
     const scannedCourt = params.get('court') || null;
+    const scannedTv = params.get('tv') || null;
     setSessionParam(scannedSession);
     setCourtParam(scannedCourt);
+    setTvParam(scannedTv);
     setSavedAccounts(getValidSavedAccounts());
 
     async function checkExistingSession() {
@@ -92,7 +95,7 @@ export function LoginForm({ initialMode = 'signin' }) {
         const dest = await resolveAuthenticatedDestination(
           supabase,
           session.user.id,
-          { sessionId: scannedSession, courtNumber: scannedCourt }
+          { sessionId: scannedSession, courtNumber: scannedCourt, tvId: scannedTv }
         );
         if (isMounted) router.replace(dest);
       } catch (err) {
@@ -185,7 +188,7 @@ export function LoginForm({ initialMode = 'signin' }) {
       const dest = await resolveAuthenticatedDestination(
         supabase,
         userId,
-        { sessionId: sessionParam, courtNumber: courtParam }
+        { sessionId: sessionParam, courtNumber: courtParam, tvId: tvParam }
       );
       router.replace(dest);
     } catch (err) {
@@ -334,7 +337,7 @@ export function LoginForm({ initialMode = 'signin' }) {
             dest = await resolveAuthenticatedDestination(
               supabase,
               data.session.user.id,
-              { sessionId: sessionParam, courtNumber: courtParam }
+              { sessionId: sessionParam, courtNumber: courtParam, tvId: tvParam }
             );
           }
           router.replace(dest);
@@ -389,7 +392,7 @@ export function LoginForm({ initialMode = 'signin' }) {
         const dest = await resolveAuthenticatedDestination(
           supabase,
           data.session.user.id,
-          { sessionId: sessionParam, courtNumber: courtParam }
+          { sessionId: sessionParam, courtNumber: courtParam, tvId: tvParam }
         );
         router.replace(dest);
         return;
@@ -407,6 +410,7 @@ export function LoginForm({ initialMode = 'signin' }) {
   const p = new URLSearchParams();
   if (courtParam) p.set('court', courtParam);
   if (sessionParam) p.set('session', sessionParam);
+  if (tvParam) p.set('tv', tvParam);
   const sessionSuffix = p.toString() ? `?${p.toString()}` : '';
 
   return (

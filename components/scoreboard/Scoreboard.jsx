@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { Eye, AlertTriangle, X } from 'lucide-react';
+import { Eye, AlertTriangle, X, Tv } from 'lucide-react';
 import { useScoreboard } from '../../hooks/useScoreboard';
 import { useMatchTimer } from '../../hooks/useMatchTimer';
 import { useMatchSync } from '../../hooks/useMatchSync';
@@ -16,6 +16,7 @@ import MatchLog from './MatchLog';
 import GameWonModal from './GameWonModal';
 import VoiceDebugOverlay from './VoiceDebugOverlay';
 import CourtQrLobbyModal from './CourtQrLobbyModal';
+import ProjectToScreenModal from './ProjectToScreenModal';
 import { VOICE_CONFIG } from '@/config/voice';
 import { supabase } from '@/config/supabase';
 import { PickleballEngine } from '@/lib/engine';
@@ -24,6 +25,7 @@ import {
   resolveAuthenticatedDestination,
   resolveSignedOutDestination,
 } from '@/lib/auth-session';
+import { pairTvWithCourt, notifyTvCourtClosed } from '@/lib/tv-pairing';
 
 export function Scoreboard() {
   const router = useRouter();
@@ -34,8 +36,11 @@ export function Scoreboard() {
   const [gameWonModalOpen, setGameWonModalOpen] = useState(false);
   const [isTimeExpired, setIsTimeExpired] = useState(false);
   const [qrModalExplicitOpen, setQrModalExplicitOpen] = useState(false);
+  const [projectModalOpen, setProjectModalOpen] = useState(false);
   const [umpireDismissedLobby, setUmpireDismissedLobby] = useState(false);
   const [showAbandonModal, setShowAbandonModal] = useState(false);
+  const [tvBannerMessage, setTvBannerMessage] = useState('');
+  const pairedTvHandledRef = useRef(false);
 
   // 1. Detect Viewer / Guest State (isGuest disables officiating controls)
   const [isGuest, setIsGuest] = useState(() => {
@@ -102,12 +107,8 @@ export function Scoreboard() {
           setProfile(data);
 
           if (data.role === 'player') {
-            if (!sessionParam) {
-              router.replace('/player');
-              return;
-            }
-            // Signed-in Player viewing an active match via ?session=<id> QR scan (read-only viewer)
-            setIsGuest(true);
+            // Players do not access live scoreboard on their phones; route to Player Portal
+            router.replace('/player');
             return;
           }
         }
@@ -150,6 +151,38 @@ export function Scoreboard() {
       sync?.serverSession?.umpire_id &&
       sync.serverSession.umpire_id === userId
   );
+
+  // Auto-pair TV if officiating umpire scanned TV QR (?tv=<tvId>) while in active match
+  useEffect(() => {
+    if (typeof window === 'undefined' || !isOwningUmpire || !sync?.serverSession?.id || pairedTvHandledRef.current) {
+      return;
+    }
+    const params = new URLSearchParams(window.location.search);
+    const scannedTv = params.get('tv');
+    if (!scannedTv) return;
+
+    pairedTvHandledRef.current = true;
+    const courtNum =
+      Number(
+        sync.serverSession.court_number ||
+          sync.serverSession.player_names?.courtNumber
+      ) || 1;
+
+    pairTvWithCourt({
+      tvId: scannedTv,
+      courtNumber: courtNum,
+      sessionId: sync.serverSession.id,
+    })
+      .then(() => {
+        setTvBannerMessage(`Connected Courtside TV Screen to Court ${courtNum}!`);
+        const url = new URL(window.location.href);
+        url.searchParams.delete('tv');
+        window.history.replaceState({}, '', url.pathname + url.search);
+      })
+      .catch((err) => {
+        console.warn('[Scoreboard] Failed to pair TV:', err);
+      });
+  }, [isOwningUmpire, sync?.serverSession]);
 
   const isQrModalOpen = Boolean(
     qrModalExplicitOpen ||
@@ -303,15 +336,53 @@ export function Scoreboard() {
   }, [isGuest, reset, timer, sync, state?.gameOver, router]);
 
   const handleGoToMatches = useCallback(async () => {
-    if (sync?.isEnabled && sync.sessionId && (state?.gameOver || timer.status === 'expired')) {
-      await sync.closeSession('completed');
+    const closingSessionId = sync?.sessionId;
+    const courtNum =
+      Number(
+        sync?.serverSession?.court_number ||
+          sync?.serverSession?.player_names?.courtNumber
+      ) || null;
+    const pairedTvIds = Array.isArray(sync?.serverSession?.player_names?.pairedTvIds)
+      ? sync.serverSession.player_names.pairedTvIds
+      : [];
+
+    if (
+      sync?.isEnabled &&
+      closingSessionId &&
+      (state?.gameOver || timer.status === 'expired' || timer.remainingSeconds === 0)
+    ) {
+      await Promise.allSettled([
+        notifyTvCourtClosed({
+          courtNumber: courtNum,
+          sessionId: closingSessionId,
+          reason: 'completed',
+          pairedTvIds,
+        }),
+        sync.closeSession('completed'),
+      ]);
     }
     router.push('/matches');
-  }, [sync, state?.gameOver, timer.status, router]);
+  }, [sync, state?.gameOver, timer.status, timer.remainingSeconds, router]);
 
   const handleAbandon = useCallback(async () => {
     if (isGuest || !sync?.sessionId) return;
+    const closingSessionId = sync.sessionId;
+    const courtNum =
+      Number(
+        sync?.serverSession?.court_number ||
+          sync?.serverSession?.player_names?.courtNumber
+      ) || null;
+    const pairedTvIds = Array.isArray(sync?.serverSession?.player_names?.pairedTvIds)
+      ? sync.serverSession.player_names.pairedTvIds
+      : [];
+
     try {
+      await notifyTvCourtClosed({
+        courtNumber: courtNum,
+        sessionId: closingSessionId,
+        reason: 'abandoned',
+        pairedTvIds,
+      });
       await sync.closeSession('abandoned');
       router.replace('/matches');
     } catch (err) {
@@ -433,6 +504,28 @@ export function Scoreboard() {
         </div>
       )}
 
+      {/* 1b. TV Pairing Confirmation Banner */}
+      {tvBannerMessage && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="flex items-center justify-between gap-3 bg-[#EAF0E5] border-b border-[#0F5C62]/40 px-4 py-2 text-[13px] font-bold text-[#084B46]"
+        >
+          <div className="flex items-center gap-2">
+            <Tv size={15} className="text-[#0F5C62] shrink-0" aria-hidden="true" />
+            <span>{tvBannerMessage}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setTvBannerMessage('')}
+            className="p-1 text-[#084B46] hover:text-[#0F5C62] rounded bg-transparent border-0 cursor-pointer"
+            aria-label="Dismiss TV pairing notice"
+          >
+            <X size={15} />
+          </button>
+        </div>
+      )}
+
       {/* 2. Version Conflict / Sync Alert Toast */}
       {sync?.toastMessage && (
         <div
@@ -461,11 +554,12 @@ export function Scoreboard() {
           state?.gameOver
             ? profile?.role === 'player'
               ? () => router.push('/player')
-              : () => router.push('/matches')
+              : handleGoToMatches
             : undefined
         }
         backLabel={profile?.role === 'player' ? 'Profile' : 'Matches'}
         onAbandonMatch={isOwningUmpire && !state?.gameOver ? () => setShowAbandonModal(true) : undefined}
+        onOpenProjectModal={isOwningUmpire && sync?.sessionId ? () => setProjectModalOpen(true) : undefined}
         onOpenQrModal={sync?.sessionId ? () => setQrModalExplicitOpen(true) : undefined}
         onOpenLog={() => !isGuest && setLogOpen(true)}
         profile={profile}
@@ -600,6 +694,27 @@ export function Scoreboard() {
           isUmpire={isOwningUmpire}
           onSessionUpdated={(updated) => {
             sync.refetchAndRehydrate(updated);
+          }}
+        />
+      )}
+
+      {/* 5b. Project to Screen Modal (Available during active match) */}
+      {isOwningUmpire && sync?.serverSession && (
+        <ProjectToScreenModal
+          isOpen={projectModalOpen}
+          onClose={() => setProjectModalOpen(false)}
+          courtNumber={
+            Number(
+              sync.serverSession.court_number ||
+                sync.serverSession.player_names?.courtNumber
+            ) || 1
+          }
+          sessionId={sync.serverSession.id}
+          onPaired={(cNum, updated) => {
+            if (updated) {
+              sync.refetchAndRehydrate(updated);
+            }
+            setTvBannerMessage(`Connected Courtside TV Screen to Court ${cNum}!`);
           }}
         />
       )}

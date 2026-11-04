@@ -11,12 +11,16 @@ import {
   Plus,
   Loader2,
   Shield,
+  Tv,
+  Check,
 } from 'lucide-react';
 import { supabase } from '@/config/supabase';
 import Header from '@/components/layout/Header';
 import AuthLoadingSplash from '@/components/auth/AuthLoadingSplash';
 import CourtQrLobbyModal from '@/components/scoreboard/CourtQrLobbyModal';
+import ProjectToScreenModal from '@/components/scoreboard/ProjectToScreenModal';
 import { formatMmSs } from '@/hooks/useMatchTimer';
+import { pairTvWithCourt } from '@/lib/tv-pairing';
 
 function getCourtNumber(row) {
   return Number(row?.court_number || row?.player_names?.courtNumber) || null;
@@ -45,8 +49,11 @@ export default function MatchesPage() {
   const [walkupName, setWalkupName] = useState('');
   const [firstServerMap, setFirstServerMap] = useState({ 1: 0, 2: 0, 3: 0, 4: 0 });
   const [qrModalCourtNum, setQrModalCourtNum] = useState(null);
+  const [projectModalCourtNum, setProjectModalCourtNum] = useState(null);
   const [actionError, setActionError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [pendingTvId, setPendingTvId] = useState(null);
+  const [tvPairedMessage, setTvPairedMessage] = useState('');
   const [, setTick] = useState(0);
 
   // 1. Authenticate user & load profile
@@ -190,6 +197,9 @@ export default function MatchesPage() {
   useEffect(() => {
     if (!user?.id || isLoadingCourts) return;
 
+    const search = typeof window !== 'undefined' ? window.location.search : '';
+    const tvParam = new URLSearchParams(search).get('tv');
+
     for (let c = 1; c <= 4; c++) {
       const cSession = courtsData[c];
       if (
@@ -197,11 +207,24 @@ export default function MatchesPage() {
         getAssignedUmpireId(cSession) === user.id &&
         cSession.player_names?.lobbyLocked === true
       ) {
-        router.replace(`/pikolscore?session=${encodeURIComponent(cSession.id)}`);
+        const destParams = new URLSearchParams();
+        destParams.set('session', cSession.id);
+        if (tvParam) destParams.set('tv', tvParam);
+        router.replace(`/pikolscore?${destParams.toString()}`);
         return;
       }
     }
   }, [user?.id, courtsData, isLoadingCourts, router]);
+
+  // Read ?tv=<tvId> parameter on mount
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    const scannedTv = params.get('tv');
+    if (scannedTv) {
+      setPendingTvId(scannedTv);
+    }
+  }, []);
 
   // Auto-join if arriving via ?court=1..4 and currently unassigned
   useEffect(() => {
@@ -261,9 +284,50 @@ export default function MatchesPage() {
     }
   };
 
+  // Pair a TV screen with a specific court
+  const handlePairTvToCourt = useCallback(
+    async (courtNumber, explicitTvId = null) => {
+      const tvToPair = explicitTvId || pendingTvId;
+      if (!tvToPair || !courtNumber) return;
+      setActionError('');
+      setIsSubmitting(true);
+      try {
+        const existingSession = courtsData[courtNumber];
+        const data = await pairTvWithCourt({
+          tvId: tvToPair,
+          courtNumber,
+          sessionId: existingSession?.id,
+        });
+        if (data?.session) {
+          setCourtsData((prev) => ({
+            ...prev,
+            [courtNumber]: data.session,
+          }));
+        }
+        setPendingTvId(null);
+        setTvPairedMessage(`Connected Courtside TV Screen to Court ${courtNumber}!`);
+        if (typeof window !== 'undefined') {
+          const url = new URL(window.location.href);
+          url.searchParams.delete('tv');
+          window.history.replaceState({}, '', url.pathname + url.search);
+        }
+        fetchCourts();
+      } catch (err) {
+        setActionError(err.message || 'Failed to pair TV screen');
+      } finally {
+        setIsSubmitting(false);
+      }
+    },
+    [pendingTvId, courtsData, fetchCourts]
+  );
+
   // Umpire Actions
   const handleJoinCourt = async (courtNumber) => {
     if (isSubmitting) return;
+    if (pendingTvId) {
+      await handlePairTvToCourt(courtNumber, pendingTvId);
+      return;
+    }
     const res = await callLobbyApi({
       action: 'join_umpire',
       courtNumber,
@@ -337,6 +401,14 @@ export default function MatchesPage() {
     return null;
   }, [user?.id, courtsData]);
 
+  // If the umpire scanned a TV QR and is already assigned to a court, auto-pair immediately!
+  useEffect(() => {
+    if (!user?.id || isLoadingCourts || !pendingTvId || !myAssignedCourtNumber || isSubmitting) {
+      return;
+    }
+    handlePairTvToCourt(myAssignedCourtNumber, pendingTvId);
+  }, [user?.id, isLoadingCourts, pendingTvId, myAssignedCourtNumber, isSubmitting, handlePairTvToCourt]);
+
   const activeQrModalSession = useMemo(() => {
     if (!qrModalCourtNum) return null;
     return (
@@ -402,6 +474,87 @@ export default function MatchesPage() {
             </div>
           )}
         </div>
+
+        {/* TV Paired Confirmation Banner */}
+        {tvPairedMessage && (
+          <div
+            role="status"
+            className="mb-6 rounded-2xl bg-[#EAF0E5] border-[1.5px] border-[#0F5C62] p-4 text-sm font-bold text-[#084B46] flex items-center justify-between gap-3 animate-in fade-in"
+          >
+            <div className="flex items-center gap-2.5">
+              <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#0F5C62] text-[#FEECD6] shrink-0">
+                <Check size={16} />
+              </div>
+              <span>{tvPairedMessage}</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setTvPairedMessage('')}
+              className="p-1 text-[#084B46] hover:text-[#0F5C62] bg-transparent border-0 cursor-pointer"
+              aria-label="Dismiss TV pairing notice"
+            >
+              <X size={16} />
+            </button>
+          </div>
+        )}
+
+        {/* Pending TV Pairing Selection Banner (when Umpire is not yet assigned to a court) */}
+        {pendingTvId && !myAssignedCourtNumber && (
+          <div
+            role="region"
+            aria-label="Pair Courtside TV"
+            className="mb-6 rounded-3xl bg-[#084B46] text-[#FEFEFB] p-5 sm:p-6 border-2 border-[#0F5C62] shadow-lg flex flex-col gap-4"
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-[#0F5C62] text-[#FEECD6]">
+                  <Tv size={22} />
+                </div>
+                <div>
+                  <span className="text-[11px] font-bold uppercase tracking-widest text-[#FEECD6]">
+                    TV Screen Pairing Active
+                  </span>
+                  <h2 className="text-lg sm:text-xl font-bold text-white m-0 mt-0.5">
+                    Select a Court to Display on the TV Screen
+                  </h2>
+                  <p className="text-xs text-[#EAF0E5]/80 m-0 mt-0.5">
+                    Tap a court below (or click &ldquo;Join as Umpire&rdquo; on any court card) to link the TV and join as its supervising umpire.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPendingTvId(null)}
+                className="p-1.5 text-[#EAF0E5]/70 hover:text-white bg-transparent border-0 cursor-pointer"
+                aria-label="Cancel TV pairing"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+              {[1, 2, 3, 4].map((cNum) => {
+                const s = courtsData[cNum];
+                const existingUmpire = getAssignedUmpireId(s);
+                const otherUmpire = Boolean(existingUmpire && existingUmpire !== user?.id);
+                return (
+                  <button
+                    key={`pair-btn-${cNum}`}
+                    type="button"
+                    disabled={isSubmitting || otherUmpire}
+                    onClick={() => handlePairTvToCourt(cNum, pendingTvId)}
+                    className="h-11 rounded-2xl bg-[#0F5C62] hover:bg-[#FEECD6] hover:text-[#084B46] text-[#FEECD6] text-xs font-bold transition-colors cursor-pointer border border-[#FEECD6]/20 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-1.5"
+                  >
+                    <Tv size={14} />
+                    <span>
+                      {otherUmpire ? `Court ${cNum} (Busy)` : `Pair Court ${cNum}`}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* Global Error Banner */}
         {actionError && (
@@ -497,16 +650,29 @@ export default function MatchesPage() {
                     </div>
                   </div>
 
-                  {/* QR Code Action Button */}
-                  <button
-                    type="button"
-                    onClick={() => setQrModalCourtNum(courtNum)}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#FAF9F5] border border-[#E2E5DC] text-xs font-semibold text-[#084B46] hover:bg-[#EAF0E5] transition-colors cursor-pointer"
-                    title={`View QR Code for Court ${courtNum}`}
-                  >
-                    <QrCode size={14} />
-                    <span>Court QR</span>
-                  </button>
+                  {/* QR Code & Project to Screen Action Buttons */}
+                  <div className="flex items-center gap-2 flex-wrap justify-end">
+                    {isMyCourt && (
+                      <button
+                        type="button"
+                        onClick={() => setProjectModalCourtNum(courtNum)}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#0F5C62] border border-[#0F5C62] text-xs font-bold text-[#FEECD6] hover:bg-[#085953] transition-colors cursor-pointer shadow-sm"
+                        title={`Project Court ${courtNum} to a TV Screen`}
+                      >
+                        <Tv size={14} />
+                        <span>Project to Screen</span>
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => setQrModalCourtNum(courtNum)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#FAF9F5] border border-[#E2E5DC] text-xs font-semibold text-[#084B46] hover:bg-[#EAF0E5] transition-colors cursor-pointer"
+                      title={`View QR Code for Court ${courtNum}`}
+                    >
+                      <QrCode size={14} />
+                      <span>Court QR</span>
+                    </button>
+                  </div>
                 </div>
 
                 {/* Umpire Assignment Status */}
@@ -897,6 +1063,23 @@ export default function MatchesPage() {
           }}
         />
       )}
+
+      {/* Project to Screen Modal */}
+      <ProjectToScreenModal
+        isOpen={Boolean(projectModalCourtNum)}
+        onClose={() => setProjectModalCourtNum(null)}
+        courtNumber={projectModalCourtNum}
+        sessionId={
+          projectModalCourtNum ? courtsData[projectModalCourtNum]?.id : undefined
+        }
+        onPaired={(cNum, updatedSession) => {
+          if (updatedSession && cNum) {
+            setCourtsData((prev) => ({ ...prev, [cNum]: updatedSession }));
+          }
+          setTvPairedMessage(`Connected Courtside TV Screen to Court ${cNum}!`);
+          fetchCourts();
+        }}
+      />
     </div>
   );
 }
