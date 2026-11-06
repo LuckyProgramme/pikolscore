@@ -137,7 +137,7 @@ export default function ScreenView() {
     }
   }, []);
 
-  // Unpair TV and return to /role QR Pairing screen
+  // Unpair TV and return to /umpire QR Pairing screen
   const handleUnpairTv = useCallback(() => {
     setPairedCourt(null);
     setAbandonCountdown(null);
@@ -151,7 +151,7 @@ export default function ScreenView() {
       window.localStorage.setItem(TV_ID_STORAGE_KEY, freshId);
       window.sessionStorage.setItem(TV_RETURN_TO_ROLE_KEY, '1');
     }
-    router.replace('/role');
+    router.replace('/umpire');
   }, [router]);
 
   // Trigger 5-second "Abandon the match" prompt before returning to /role
@@ -719,10 +719,10 @@ export default function ScreenView() {
               <span>{muted ? 'Sound Muted' : 'Sound On'}</span>
             </button>
             <Link
-              href="/role"
+              href="/umpire"
               className="px-4 py-2 rounded-full bg-white/10 hover:bg-white/20 text-xs font-semibold text-[#EAF0E5] no-underline transition-colors"
             >
-              Switch Role
+              Umpire Console
             </Link>
           </div>
         </header>

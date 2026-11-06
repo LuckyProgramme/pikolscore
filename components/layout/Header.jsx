@@ -142,7 +142,7 @@ export function Header({
           console.error('onLogout callback error:', e);
         }
       }
-      window.location.replace('/role');
+      window.location.replace('/umpire');
       return;
     }
 

@@ -282,7 +282,7 @@ export function ProjectToScreenModal({
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold uppercase tracking-wider text-teal flex items-center gap-1.5">
               <Camera size={14} />
-              <span>Scan QR Code on TV (/role page)</span>
+              <span>Scan QR Code on TV (/umpire page)</span>
             </span>
             {cameraState === 'active' && (
               <span className="text-[11px] font-semibold text-muted">
@@ -324,7 +324,7 @@ export function ProjectToScreenModal({
                   Camera preview unavailable
                 </span>
                 <span className="text-xs text-[#EAF0E5]/80">
-                  Enter the 6-character TV Code shown below the QR on the TV&apos;s /role page, or scan the TV with your phone&apos;s native camera app.
+                  Enter the 6-character TV Code shown below the QR on the TV&apos;s /umpire page, or scan the TV with your phone&apos;s native camera app.
                 </span>
               </div>
             )}
@@ -337,7 +337,7 @@ export function ProjectToScreenModal({
             htmlFor="manual-tv-code"
             className="block text-xs font-bold uppercase tracking-wider text-dark-teal mb-2"
           >
-            Or Enter 6-Character TV Code from /role
+            Or Enter 6-Character TV Code from /umpire
           </label>
           <div className="flex items-center gap-2">
             <input

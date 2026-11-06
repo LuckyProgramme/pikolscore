@@ -1,187 +1,238 @@
-import { AUTH_CONTENT } from '@/config/content/auth';
+'use client';
+
+import { useEffect, useState, useMemo, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
+import { Tv, QrCode, RefreshCw, Loader2 } from 'lucide-react';
+import QRCode from 'qrcode';
+import { supabase } from '@/config/supabase';
+import {
+  TV_ID_STORAGE_KEY,
+  PAIRED_COURT_STORAGE_KEY,
+  generateTvId,
+  getShortTvCode,
+  normalizeTvId,
+} from '@/lib/tv-pairing';
+import { getSynth } from '@/lib/audio';
+
+function getCourtNumber(row) {
+  return Number(row?.court_number || row?.player_names?.courtNumber) || null;
+}
 
 export function CourtPanel() {
+  const router = useRouter();
+  const [tvId, setTvId] = useState('');
+  const [tvQrSvg, setTvQrSvg] = useState('');
+
+  // Navigate TV to /screen?court=<courtNumber> when umpire pairs this TV code
+  const routeTvToCourt = useCallback(
+    (courtNumber) => {
+      const cNum = Number(courtNumber);
+      if (!cNum || cNum < 1 || cNum > 4) return;
+      getSynth()?.armed();
+      if (typeof window !== 'undefined') {
+        window.localStorage.setItem(PAIRED_COURT_STORAGE_KEY, String(cNum));
+      }
+      router.replace(`/screen?court=${encodeURIComponent(cNum)}`);
+    },
+    [router]
+  );
+
+  // Initialize or load persistent TV pairing device ID
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    let storedTvId = normalizeTvId(window.localStorage.getItem(TV_ID_STORAGE_KEY));
+    if (!storedTvId || storedTvId.length > 12) {
+      storedTvId = generateTvId();
+      window.localStorage.setItem(TV_ID_STORAGE_KEY, storedTvId);
+    }
+    setTvId(storedTvId);
+  }, []);
+
+  // Generate QR Code SVG for the TV Pairing Panel
+  const tvPairingUrl = useMemo(() => {
+    if (typeof window === 'undefined' || !tvId) return '';
+    return `${window.location.origin}/?tv=${encodeURIComponent(tvId)}`;
+  }, [tvId]);
+
+  useEffect(() => {
+    if (!tvPairingUrl) return;
+    let isMounted = true;
+
+    QRCode.toString(
+      tvPairingUrl,
+      {
+        type: 'svg',
+        margin: 1,
+        color: {
+          dark: '#084B46',
+          light: '#FEFEFB',
+        },
+      },
+      (err, svg) => {
+        if (!err && isMounted) {
+          setTvQrSvg(svg);
+        }
+      }
+    );
+
+    return () => {
+      isMounted = false;
+    };
+  }, [tvPairingUrl]);
+
+  // Listen in real-time on /umpire so scanning the QR code with an umpire phone auto-detects the court and projects it
+  useEffect(() => {
+    if (!tvId) return;
+
+    let isMounted = true;
+
+    // 1. Check if this tvId was already paired to an active match_session
+    async function checkExistingTvPairing() {
+      try {
+        const { data } = await supabase
+          .from('match_sessions')
+          .select('id, court_number, player_names, status')
+          .eq('status', 'in_progress');
+
+        if (!isMounted || !Array.isArray(data)) return;
+        for (const row of data) {
+          const tvIds = row?.player_names?.pairedTvIds;
+          if (
+            Array.isArray(tvIds) &&
+            tvIds.some((id) => normalizeTvId(id) === normalizeTvId(tvId))
+          ) {
+            const cNum = getCourtNumber(row);
+            if (cNum >= 1 && cNum <= 4) {
+              routeTvToCourt(cNum);
+              return;
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('[/umpire] Error checking existing TV pairing:', err);
+      }
+    }
+
+    checkExistingTvPairing();
+
+    // 2. Subscribe to Supabase Realtime broadcast channel `tv_pairing:<tvId>`
+    const pairChannel = supabase
+      .channel(`tv_pairing:${tvId}`)
+      .on('broadcast', { event: 'paired' }, (msg) => {
+        const targetCourt = Number(msg?.payload?.courtNumber);
+        if (targetCourt >= 1 && targetCourt <= 4) {
+          routeTvToCourt(targetCourt);
+        }
+      })
+      .subscribe();
+
+    // 3. Subscribe to postgres_changes on match_sessions as reliable DB fallback
+    const dbChannel = supabase
+      .channel(`umpire_tv_db_${tvId}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'match_sessions' },
+        (payload) => {
+          const newRow = payload?.new;
+          if (!newRow || newRow.status !== 'in_progress') return;
+          const tvIds = newRow?.player_names?.pairedTvIds;
+          if (
+            Array.isArray(tvIds) &&
+            tvIds.some((id) => normalizeTvId(id) === normalizeTvId(tvId))
+          ) {
+            const cNum = getCourtNumber(newRow);
+            if (cNum >= 1 && cNum <= 4) {
+              routeTvToCourt(cNum);
+            }
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      isMounted = false;
+      supabase.removeChannel(pairChannel);
+      supabase.removeChannel(dbChannel);
+    };
+  }, [tvId, routeTvToCourt]);
+
+  const handleRefreshTvCode = () => {
+    const freshId = generateTvId();
+    setTvId(freshId);
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem(TV_ID_STORAGE_KEY, freshId);
+    }
+  };
+
+  const shortTvCode = getShortTvCode(tvId);
+
   return (
     <aside
-      className="relative hidden overflow-hidden bg-ivory min-[900px]:block"
-      aria-label="PikolScore highlights"
+      className="relative hidden min-[900px]:flex flex-col justify-between items-center overflow-hidden bg-ivory px-10 py-10"
+      aria-label="Courtside TV Projection QR"
     >
-      <div className="px-[72px] pt-[104px]">
-        <svg width="40" height="32" viewBox="0 0 40 32" fill="#8A9B82" aria-hidden="true">
-          <path d="M0 32V16C0 6 5 1 14 0v7c-4 1-6 4-6 8h6v17zM22 32V16c0-10 5-15 14-16v7c-4 1-6 4-6 8h6v17z" />
-        </svg>
-        <p className="mt-5 text-[30px] leading-[40px] font-semibold tracking-[-0.01em] text-dark-teal">
-          {AUTH_CONTENT.courtPanel.quote}
-        </p>
-        <div className="mt-6 flex items-center gap-2.5 text-[15px] font-medium text-deep-green">
-          <span className="h-2.5 w-2.5 rounded-full bg-cream ring-[1.5px] ring-teal" />
-          {AUTH_CONTENT.courtPanel.attribution}
+      {/* Top Right Status Pill */}
+      <div className="w-full flex items-center justify-end">
+        <span className="inline-flex items-center gap-1.5 rounded-full bg-pale-sage px-3.5 py-1.5 text-xs font-bold text-teal border border-teal/20">
+          <Tv size={14} />
+          <span>TV Auto-Projection Ready</span>
+        </span>
+      </div>
+
+      {/* Centered Courtside TV Screen Card */}
+      <div className="my-auto w-full max-w-[420px] rounded-3xl bg-[#084B46] text-[#FEFEFB] p-6 sm:p-8 border-2 border-[#0F5C62] flex flex-col justify-between items-center text-center shadow-lg">
+        <div className="w-full flex items-center justify-between">
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-[#0F5C62] px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-[#FEECD6] border border-[#FEECD6]/20">
+            <Tv size={13} />
+            <span>Courtside TV Screen</span>
+          </span>
+          <button
+            type="button"
+            onClick={handleRefreshTvCode}
+            title="Generate a new TV pairing code"
+            className="inline-flex items-center gap-1 text-xs font-semibold text-[#EAF0E5]/80 hover:text-[#FEECD6] bg-transparent border-0 cursor-pointer"
+          >
+            <RefreshCw size={13} />
+            <span>Refresh</span>
+          </button>
+        </div>
+
+        <div className="my-5 flex flex-col items-center">
+          <div className="bg-white p-3.5 rounded-2xl border-2 border-[#FEECD6]/30 shadow-md">
+            {tvQrSvg ? (
+              <div
+                className="w-48 h-48 sm:w-52 sm:h-52 flex items-center justify-center [&>svg]:w-full [&>svg]:h-full"
+                dangerouslySetInnerHTML={{ __html: tvQrSvg }}
+              />
+            ) : (
+              <div className="w-48 h-48 sm:w-52 sm:h-52 flex items-center justify-center">
+                <Loader2 size={28} className="animate-spin text-[#0F5C62]" />
+              </div>
+            )}
+          </div>
+
+          <div className="mt-3.5 inline-flex items-center gap-2 rounded-xl bg-[#0F5C62] px-3.5 py-1.5 border border-[#FEECD6]/20">
+            <QrCode size={14} className="text-[#FEECD6]" />
+            <span className="text-[11px] uppercase font-bold tracking-wider text-[#EAF0E5]">
+              TV Code:
+            </span>
+            <span className="font-mono text-sm font-black tracking-widest text-[#FEECD6]">
+              {shortTvCode || '------'}
+            </span>
+          </div>
+        </div>
+
+        <div>
+          <h2 className="text-lg font-extrabold text-white m-0 mb-1">
+            Scan with Umpire Phone to Project
+          </h2>
+          <p className="text-xs text-[#EAF0E5]/85 m-0 leading-relaxed">
+            Umpires can tap <strong>&ldquo;Project to Screen&rdquo;</strong> on their court or scan this QR code to automatically project their court&apos;s lobby and live scoreboard here.
+          </p>
         </div>
       </div>
-      <div className="absolute inset-x-0 bottom-[-6px]">
-        <svg
-          className="block h-auto w-full"
-          xmlns="http://www.w3.org/2000/svg"
-          viewBox="0 25 572 385"
-          role="img"
-          aria-label="Animated pickleball rally on a court"
-        >
-          <style>{`
-            .dust { fill: none; stroke: #FEECD6; stroke-width: 2.5; opacity: 0; }
-            @media (prefers-reduced-motion: no-preference) {
-              .anim-ground { animation: rally-ground 8s linear infinite; }
-              .anim-height { animation: rally-height 8s linear infinite; }
-              .anim-shadow { animation: rally-shadow 8s linear infinite; }
-              .anim-squash { animation: rally-squash 8s linear infinite; }
-              .anim-spin { animation: rally-spin 8s linear infinite; }
-              .anim-net { animation: net-wobble 8s linear infinite; }
-              .anim-dust-1 { animation: dust-1 8s linear infinite; }
-              .anim-dust-2 { animation: dust-2 8s linear infinite; }
-              .anim-dust-3 { animation: dust-3 8s linear infinite; }
-            }
-            @keyframes rally-ground {
-              0% { transform: translate(285px, 290px); }
-              18.75% { transform: translate(387px, 212px); }
-              37.5% { transform: translate(140px, 245px); }
-              52.5% { transform: translate(267px, 152px); }
-              71.25% { transform: translate(285px, 290px); }
-              74% { transform: translate(285px, 290px); }
-              76.5% { transform: translate(285px, 290px); }
-              78% { transform: translate(285px, 290px); }
-              100% { transform: translate(285px, 290px); }
-            }
-            @keyframes rally-height {
-              0% { transform: translateY(0px); animation-timing-function: cubic-bezier(0.2, 0.6, 0.4, 1); }
-              9.375% { transform: translateY(-78px); animation-timing-function: cubic-bezier(0.6, 0, 0.8, 0.4); }
-              18.75% { transform: translateY(0px); animation-timing-function: cubic-bezier(0.2, 0.6, 0.4, 1); }
-              28.125% { transform: translateY(-60px); animation-timing-function: cubic-bezier(0.6, 0, 0.8, 0.4); }
-              37.5% { transform: translateY(-20px); animation-timing-function: cubic-bezier(0.2, 0.6, 0.4, 1); }
-              45% { transform: translateY(-55px); animation-timing-function: cubic-bezier(0.6, 0, 0.8, 0.4); }
-              52.5% { transform: translateY(0px); animation-timing-function: cubic-bezier(0.2, 0.6, 0.4, 1); }
-              61.875% { transform: translateY(-70px); animation-timing-function: cubic-bezier(0.6, 0, 0.8, 0.4); }
-              71.25% { transform: translateY(0px); animation-timing-function: cubic-bezier(0.2, 0.6, 0.4, 1); }
-              73.5% { transform: translateY(-15px); animation-timing-function: cubic-bezier(0.6, 0, 0.8, 0.4); }
-              75.5% { transform: translateY(0px); animation-timing-function: cubic-bezier(0.2, 0.6, 0.4, 1); }
-              77% { transform: translateY(-5px); animation-timing-function: cubic-bezier(0.6, 0, 0.8, 0.4); }
-              78.5% { transform: translateY(0px); animation-timing-function: ease-in-out; }
-              85% { transform: translateY(-1.5px); animation-timing-function: ease-in-out; }
-              92% { transform: translateY(0px); animation-timing-function: ease-in-out; }
-              97% { transform: translateY(-0.5px); animation-timing-function: ease-in-out; }
-              100% { transform: translateY(0px); }
-            }
-            @keyframes rally-shadow {
-              0% { transform: scale(1); opacity: 0.35; animation-timing-function: cubic-bezier(0.2, 0.6, 0.4, 1); }
-              9.375% { transform: scale(0.4); opacity: 0.1; animation-timing-function: cubic-bezier(0.6, 0, 0.8, 0.4); }
-              18.75% { transform: scale(1); opacity: 0.35; animation-timing-function: cubic-bezier(0.2, 0.6, 0.4, 1); }
-              28.125% { transform: scale(0.5); opacity: 0.15; animation-timing-function: cubic-bezier(0.6, 0, 0.8, 0.4); }
-              37.5% { transform: scale(0.85); opacity: 0.28; animation-timing-function: cubic-bezier(0.2, 0.6, 0.4, 1); }
-              45% { transform: scale(0.55); opacity: 0.18; animation-timing-function: cubic-bezier(0.6, 0, 0.8, 0.4); }
-              52.5% { transform: scale(1); opacity: 0.35; animation-timing-function: cubic-bezier(0.2, 0.6, 0.4, 1); }
-              61.875% { transform: scale(0.45); opacity: 0.12; animation-timing-function: cubic-bezier(0.6, 0, 0.8, 0.4); }
-              71.25% { transform: scale(1); opacity: 0.35; animation-timing-function: cubic-bezier(0.2, 0.6, 0.4, 1); }
-              73.5% { transform: scale(0.7); opacity: 0.2; animation-timing-function: cubic-bezier(0.6, 0, 0.8, 0.4); }
-              75.5% { transform: scale(1); opacity: 0.35; animation-timing-function: cubic-bezier(0.2, 0.6, 0.4, 1); }
-              77% { transform: scale(0.9); opacity: 0.3; animation-timing-function: cubic-bezier(0.6, 0, 0.8, 0.4); }
-              78.5% { transform: scale(1); opacity: 0.35; animation-timing-function: linear; }
-              100% { transform: scale(1); opacity: 0.35; }
-            }
-            @keyframes rally-squash {
-              0%, 17.5% { transform: scale(1, 1); }
-              18.75% { transform: scale(1.15, 0.85); }
-              19.5% { transform: scale(0.95, 1.05); }
-              20.5%, 51.5% { transform: scale(1, 1); }
-              52.5% { transform: scale(1.15, 0.85); }
-              53.25% { transform: scale(0.95, 1.05); }
-              54.25%, 70.25% { transform: scale(1, 1); }
-              71.25% { transform: scale(1.15, 0.85); }
-              72% { transform: scale(0.95, 1.05); }
-              73%, 100% { transform: scale(1, 1); }
-            }
-            @keyframes rally-spin {
-              0% { transform: rotate(0deg); }
-              18.75% { transform: rotate(360deg); }
-              37.5% { transform: rotate(720deg); }
-              52.5% { transform: rotate(1080deg); }
-              71.25% { transform: rotate(1440deg); }
-              100% { transform: rotate(1440deg); }
-            }
-            @keyframes net-wobble {
-              0%, 7%, 12%, 26%, 31%, 43%, 48%, 60%, 65%, 100% { transform: translateY(0); }
-              9.375% { transform: translateY(-1.5px); }
-              28.125% { transform: translateY(-1.5px); }
-              45% { transform: translateY(-1.5px); }
-              61.875% { transform: translateY(-1.5px); }
-            }
-            @keyframes dust-1 {
-              0%, 18% { transform: scale(0.2); opacity: 0; }
-              18.75% { transform: scale(0.5); opacity: 0.7; }
-              22% { transform: scale(1.8); opacity: 0; }
-              100% { transform: scale(1.8); opacity: 0; }
-            }
-            @keyframes dust-2 {
-              0%, 51.5% { transform: scale(0.2); opacity: 0; }
-              52.5% { transform: scale(0.5); opacity: 0.7; }
-              55.5% { transform: scale(1.8); opacity: 0; }
-              100% { transform: scale(1.8); opacity: 0; }
-            }
-            @keyframes dust-3 {
-              0%, 70.25% { transform: scale(0.2); opacity: 0; }
-              71.25% { transform: scale(0.5); opacity: 0.7; }
-              74.5% { transform: scale(1.8); opacity: 0; }
-              100% { transform: scale(1.8); opacity: 0; }
-            }
-          `}</style>
-          <g id="court">
-            <polygon points="15,238 262,58 540,203 290,383" fill="#E2E5DC" transform="translate(0, 15)" />
-            <polygon points="15,238 262,58 540,203 290,383" fill="#8A9B82" />
-            <polygon points="55,232 265,80 500,203 290,357" fill="#0F5C62" />
-            <polygon points="155,160 395,280 385,285 145,165" fill="#8A9B82" />
-            <g stroke="#FEECD6" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <polygon points="55,232 265,80 500,203 290,357" fill="none" />
-              <line x1="197" y1="129" x2="432" y2="253" />
-              <line x1="123" y1="183" x2="358" y2="307" />
-              <line x1="314.5" y1="191" x2="382.5" y2="141.5" />
-              <line x1="240.5" y1="245" x2="172.5" y2="294.5" />
-            </g>
-          </g>
-          <g id="dust-layer">
-            <g transform="translate(387, 212)">
-              <ellipse cx="0" cy="0" rx="12" ry="6" className="dust anim-dust-1" style={{ transformOrigin: '0 0' }} />
-            </g>
-            <g transform="translate(267, 152)">
-              <ellipse cx="0" cy="0" rx="12" ry="6" className="dust anim-dust-2" style={{ transformOrigin: '0 0' }} />
-            </g>
-            <g transform="translate(285, 290)">
-              <ellipse cx="0" cy="0" rx="12" ry="6" className="dust anim-dust-3" style={{ transformOrigin: '0 0' }} />
-            </g>
-          </g>
-          <g id="net" className="anim-net">
-            <polygon points="152,120 422,265 422,300 152,155" fill="#084B46" opacity="0.6" />
-            <line x1="152" y1="120" x2="422" y2="265" stroke="#FEECD6" strokeWidth="3" strokeLinecap="round" />
-            <path
-              d="M 179,134 L 179,169 M 206,149 L 206,184 M 233,163 L 233,198 M 260,178 L 260,213 M 287,192 L 287,227 M 314,207 L 314,242 M 341,221 L 341,256 M 368,236 L 368,271 M 395,250 L 395,285"
-              stroke="#8A9B82"
-              strokeWidth="0.75"
-              opacity="0.5"
-            />
-            <line x1="152" y1="110" x2="152" y2="168" stroke="#203F39" strokeWidth="5" strokeLinecap="round" />
-            <line x1="422" y1="255" x2="422" y2="313" stroke="#203F39" strokeWidth="5" strokeLinecap="round" />
-          </g>
-          <g className="anim-ground" transform="translate(285, 290)">
-            <ellipse cx="0" cy="0" rx="10" ry="5" fill="#203F39" className="anim-shadow" style={{ transformOrigin: '0px 0px' }} />
-            <g className="anim-height">
-              <g className="anim-squash" style={{ transformOrigin: '0px 0px' }}>
-                <g className="anim-spin" style={{ transformOrigin: '0px 0px' }}>
-                  <circle cx="0" cy="0" r="10" fill="#FEECD6" />
-                  <circle cx="-3" cy="-3" r="1.5" fill="#748079" />
-                  <circle cx="4" cy="-1" r="1.5" fill="#748079" />
-                  <circle cx="0" cy="4" r="1.5" fill="#748079" />
-                </g>
-              </g>
-            </g>
-          </g>
-        </svg>
-      </div>
+
+      <div className="h-4" aria-hidden="true" />
     </aside>
   );
 }

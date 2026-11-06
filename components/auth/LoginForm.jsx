@@ -12,6 +12,7 @@ import {
   resolveAuthenticatedDestination,
   SEVEN_DAYS_MS,
 } from '@/lib/auth-session';
+import { TV_RETURN_TO_ROLE_KEY } from '@/lib/tv-pairing';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -85,6 +86,14 @@ export function LoginForm({ initialMode = 'signin' }) {
     setTvParam(scannedTv);
     setSavedAccounts(getValidSavedAccounts());
 
+    let isTvReturn = false;
+    if (typeof window !== 'undefined') {
+      isTvReturn = window.sessionStorage.getItem(TV_RETURN_TO_ROLE_KEY) === '1';
+      if (isTvReturn) {
+        window.sessionStorage.removeItem(TV_RETURN_TO_ROLE_KEY);
+      }
+    }
+
     async function checkExistingSession() {
       try {
         const {
@@ -92,6 +101,9 @@ export function LoginForm({ initialMode = 'signin' }) {
         } = await supabase.auth.getSession();
 
         if (!isMounted || !session?.user) return;
+        // If this tab just returned from TV Screen View after match end/abandon,
+        // keep it on /umpire for next TV pairing even if an account is signed in on this browser.
+        if (isTvReturn && !scannedSession && !scannedCourt && !scannedTv) return;
         const dest = await resolveAuthenticatedDestination(
           supabase,
           session.user.id,
@@ -417,8 +429,8 @@ export function LoginForm({ initialMode = 'signin' }) {
     <section className="relative flex flex-col items-center bg-pale-sage px-8 pt-10 pb-10">
       <div className="mb-6 ml-6 flex items-center justify-between self-start w-[calc(100%-1.5rem)]">
         <Link
-          href={`/role${sessionSuffix}`}
-          aria-label="PikolScore role selection"
+          href={`/umpire${sessionSuffix}`}
+          aria-label="PikolScore Umpire Console"
           className="flex items-center gap-3 text-[26px] font-bold tracking-[-0.01em] text-dark-teal no-underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal"
         >
           <svg width="40" height="40" viewBox="0 0 40 40" aria-hidden="true">
@@ -434,12 +446,6 @@ export function LoginForm({ initialMode = 'signin' }) {
           <span className="rounded-full bg-teal/10 px-3 py-1 text-[12px] font-semibold text-dark-teal border border-teal/20">
             Umpire Console
           </span>
-          <Link
-            href={`/role${sessionSuffix}`}
-            className="text-[12px] font-semibold text-teal no-underline hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal"
-          >
-            Switch role
-          </Link>
         </div>
       </div>
 
@@ -819,16 +825,6 @@ export function LoginForm({ initialMode = 'signin' }) {
             className="font-semibold text-teal no-underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal"
           >
             {copy.footerLink}
-          </Link>
-        </p>
-
-        <p className="mt-3 text-center text-[13px] text-muted">
-          Are you a player?{' '}
-          <Link
-            href={`/player${sessionSuffix}`}
-            className="font-semibold text-teal no-underline hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal"
-          >
-            Sign in to player portal
           </Link>
         </p>
       </form>

@@ -93,6 +93,9 @@ export default function RoleChooserPage() {
 
     async function initRoleChooser() {
       const search = typeof window !== 'undefined' ? window.location.search : '';
+      // Role chooser temporarily hidden while only the umpire role is active
+      router.replace(`/umpire${search}`);
+      return;
       const params = new URLSearchParams(search);
       const scannedSession = params.get('session') || null;
       const scannedCourt = params.get('court') || null;
