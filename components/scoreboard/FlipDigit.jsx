@@ -4,7 +4,7 @@ import { memo, useRef, useEffect, useLayoutEffect } from 'react';
 
 const useIsoLayoutEffect = typeof window !== 'undefined' ? useLayoutEffect : useEffect;
 
-export const FlipDigit = memo(function FlipDigit({ value, className = '' }) {
+export const FlipDigit = memo(function FlipDigit({ value, dimmed = false, className = '' }) {
   const elRef = useRef(null);
   const prevRef = useRef(undefined);
   const strVal = String(value ?? '0');
@@ -47,7 +47,7 @@ export const FlipDigit = memo(function FlipDigit({ value, className = '' }) {
     h[2].style.visibility = 'visible';
     const foldDown = h[2].animate(
       [{ transform: 'rotateX(0deg)' }, { transform: 'rotateX(-90deg)' }],
-      { duration: 180, easing: 'ease-in' }
+      { duration: 190, easing: 'ease-in' }
     );
 
     foldDown.onfinish = () => {
@@ -55,7 +55,7 @@ export const FlipDigit = memo(function FlipDigit({ value, className = '' }) {
       h[3].style.visibility = 'visible';
       const unfoldBottom = h[3].animate(
         [{ transform: 'rotateX(90deg)' }, { transform: 'rotateX(0deg)' }],
-        { duration: 180, easing: 'ease-out' }
+        { duration: 190, easing: 'ease-out' }
       );
       unfoldBottom.onfinish = () => {
         sp[1].textContent = strVal;
@@ -64,19 +64,21 @@ export const FlipDigit = memo(function FlipDigit({ value, className = '' }) {
     };
   }, [strVal]);
 
+  const spanClass = dimmed ? 'opacity-30' : '';
+
   return (
     <div ref={elRef} className={`ps-fd ${className}`.trim()} data-v={strVal}>
       <div className="ps-h ps-t">
-        <span>{strVal}</span>
+        <span className={spanClass}>{strVal}</span>
       </div>
       <div className="ps-h ps-b">
-        <span>{strVal}</span>
+        <span className={spanClass}>{strVal}</span>
       </div>
       <div className="ps-h ps-ft">
-        <span>{strVal}</span>
+        <span className={spanClass}>{strVal}</span>
       </div>
       <div className="ps-h ps-fb">
-        <span>{strVal}</span>
+        <span className={spanClass}>{strVal}</span>
       </div>
     </div>
   );

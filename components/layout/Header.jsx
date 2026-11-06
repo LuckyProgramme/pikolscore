@@ -1,8 +1,21 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { LogOut, User, Cloud, CloudOff, RefreshCw, CheckCircle2, ArrowLeft, QrCode, Tv } from 'lucide-react';
+import {
+  LogOut,
+  User,
+  Cloud,
+  CloudOff,
+  RefreshCw,
+  CheckCircle2,
+  ArrowLeft,
+  QrCode,
+  Tv,
+  ChevronDown,
+  ClipboardList,
+  AlertTriangle,
+} from 'lucide-react';
 import { supabase } from '@/config/supabase';
 import {
   saveAccountForQuickSwitch,
@@ -16,6 +29,9 @@ export function Header({
   onBack,
   backLabel = 'Matches',
   showMatchLog = true,
+  logCount = 0,
+  courtNumber = null,
+  compactMenu = false,
   profile,
   userEmail,
   onLogout,
@@ -28,6 +44,10 @@ export function Header({
 }) {
   const router = useRouter();
   const isPlayerProfile = profile?.role === 'player';
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuWrapRef = useRef(null);
+  const menuBtnRef = useRef(null);
+  const menuListRef = useRef(null);
 
   // 1. Cross-Tab Logout Synchronization Listener
   useEffect(() => {
@@ -44,6 +64,68 @@ export function Header({
     return () => window.removeEventListener('storage', handleCrossTabLogout);
   }, [isPlayerProfile]);
 
+  // Outside click & Escape handler for compact dropdown menu
+  useEffect(() => {
+    if (!menuOpen) return;
+
+    const handlePointerDown = (e) => {
+      if (menuWrapRef.current && !menuWrapRef.current.contains(e.target)) {
+        setMenuOpen(false);
+      }
+    };
+
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        e.stopPropagation();
+        setMenuOpen(false);
+        menuBtnRef.current?.focus();
+      }
+    };
+
+    document.addEventListener('mousedown', handlePointerDown);
+    document.addEventListener('touchstart', handlePointerDown);
+    window.addEventListener('keydown', handleKeyDown);
+
+    // Focus first enabled menu item on open
+    const focusTimer = setTimeout(() => {
+      const firstItem = menuListRef.current?.querySelector(
+        '[role="menuitem"]:not([disabled])'
+      );
+      firstItem?.focus();
+    }, 15);
+
+    return () => {
+      clearTimeout(focusTimer);
+      document.removeEventListener('mousedown', handlePointerDown);
+      document.removeEventListener('touchstart', handlePointerDown);
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [menuOpen]);
+
+  const handleMenuKeyDown = (e) => {
+    const items = Array.from(
+      menuListRef.current?.querySelectorAll('[role="menuitem"]:not([disabled])') || []
+    );
+    if (items.length === 0) return;
+    const currentIndex = items.indexOf(document.activeElement);
+
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      const next = currentIndex < items.length - 1 ? currentIndex + 1 : 0;
+      items[next]?.focus();
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      const prev = currentIndex > 0 ? currentIndex - 1 : items.length - 1;
+      items[prev]?.focus();
+    } else if (e.key === 'Home') {
+      e.preventDefault();
+      items[0]?.focus();
+    } else if (e.key === 'End') {
+      e.preventDefault();
+      items[items.length - 1]?.focus();
+    }
+  };
+
   const isDemoSpectator =
     typeof window !== 'undefined' &&
     new URLSearchParams(window.location.search).get('demo') === '1';
@@ -51,6 +133,7 @@ export function Header({
 
   // 2. Soft Logout + In-Memory Purge & Hard Redirect
   const handleLogout = async () => {
+    setMenuOpen(false);
     if (isDemoSpectator || isGuestSpectator) {
       if (typeof onLogout === 'function') {
         try {
@@ -107,7 +190,181 @@ export function Header({
   };
 
   const displayIdentity =
-    profile?.full_name || profile?.username || userEmail || (isGuestSpectator ? 'Guest Spectator' : null);
+    profile?.full_name || profile?.username || userEmail || (isGuestSpectator ? 'Guest' : 'Umpire');
+
+  if (compactMenu) {
+    const courtSuffix = courtNumber ? ` · Court ${courtNumber}` : '';
+
+    return (
+      <header
+        className="ps-header !h-16 sm:!h-[68px] px-4 sm:px-6"
+        {...rest}
+      >
+        <div className="ps-logo">
+          <svg width="36" height="36" viewBox="0 0 40 40" aria-hidden="true">
+            <rect width="40" height="40" rx="12" fill="#0F5C62" />
+            <circle cx="20" cy="20" r="10" fill="#FEECD6" />
+            <circle cx="16.5" cy="16.5" r="1.6" fill="#203F39" />
+            <circle cx="23.5" cy="19" r="1.6" fill="#203F39" />
+            <circle cx="19" cy="24" r="1.6" fill="#203F39" />
+          </svg>
+          <span>PIKOLSCORE</span>
+        </div>
+
+        <div className="flex items-center gap-4 sm:gap-5">
+          {/* Plain status line with dot (no border, no fill) */}
+          <div
+            className="flex items-center gap-2 text-xs sm:text-sm font-semibold select-none"
+            title={
+              syncStatus === 'synced'
+                ? 'All actions synced to cloud'
+                : syncStatus === 'syncing'
+                ? `Syncing ${pendingCount} action${pendingCount === 1 ? '' : 's'}...`
+                : syncStatus === 'offline'
+                ? `Offline: ${pendingCount} pending action${pendingCount === 1 ? '' : 's'}`
+                : 'Cloud sync error'
+            }
+          >
+            {syncStatus === 'syncing' ? (
+              <>
+                <RefreshCw
+                  size={13}
+                  className="text-[#8A3B08] motion-safe:animate-spin shrink-0"
+                  aria-hidden="true"
+                />
+                <span className="text-[#8A3B08]">
+                  Syncing ({pendingCount}){courtSuffix}
+                </span>
+              </>
+            ) : syncStatus === 'offline' ? (
+              <>
+                <span
+                  className="size-2 rounded-full bg-[#384640] shrink-0"
+                  aria-hidden="true"
+                />
+                <span className="text-[#384640]">
+                  Offline ({pendingCount} pending){courtSuffix}
+                </span>
+              </>
+            ) : syncStatus === 'error' ? (
+              <>
+                <span
+                  className="size-2 rounded-full bg-error shrink-0"
+                  aria-hidden="true"
+                />
+                <span className="text-error">Sync error{courtSuffix}</span>
+              </>
+            ) : (
+              <>
+                <span
+                  className="size-2 rounded-full bg-[#15803D] shrink-0"
+                  aria-hidden="true"
+                />
+                <span className="text-[#166534]">
+                  Synced{courtSuffix}
+                </span>
+              </>
+            )}
+          </div>
+
+          {/* Account Menu Button + Dropdown */}
+          <div ref={menuWrapRef} className="relative">
+            <button
+              ref={menuBtnRef}
+              type="button"
+              aria-haspopup="menu"
+              aria-expanded={menuOpen}
+              onClick={() => setMenuOpen((prev) => !prev)}
+              className="ps-profile-badge cursor-pointer hover:bg-teal/10 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal !px-4 !h-11"
+            >
+              <User size={15} className="shrink-0 text-dark-teal" aria-hidden="true" />
+              <span className="max-w-[130px] truncate">{displayIdentity}</span>
+              <ChevronDown
+                size={16}
+                className={`shrink-0 text-deep-green transition-transform duration-150 ${
+                  menuOpen ? 'rotate-180' : ''
+                }`}
+                aria-hidden="true"
+              />
+            </button>
+
+            {menuOpen && (
+              <div
+                ref={menuListRef}
+                role="menu"
+                aria-label="Account and match actions"
+                onKeyDown={handleMenuKeyDown}
+                className="absolute right-0 top-full z-40 mt-2 w-[260px] rounded-2xl border border-line bg-ivory p-2 shadow-xl"
+              >
+                <button
+                  type="button"
+                  role="menuitem"
+                  disabled={!onOpenProjectModal || isGuest}
+                  onClick={() => {
+                    setMenuOpen(false);
+                    onOpenProjectModal?.();
+                  }}
+                  className="flex min-h-[48px] w-full items-center gap-3 rounded-xl px-3 text-left text-base font-semibold text-deep-green hover:bg-teal/10 disabled:opacity-40 disabled:cursor-not-allowed focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-teal cursor-pointer"
+                >
+                  <Tv size={18} className="shrink-0 text-teal" aria-hidden="true" />
+                  <span>Project to Screen</span>
+                </button>
+
+                {showMatchLog && (
+                  <button
+                    type="button"
+                    role="menuitem"
+                    disabled={isGuestSpectator}
+                    onClick={() => {
+                      setMenuOpen(false);
+                      onOpenLog?.();
+                    }}
+                    className="flex min-h-[48px] w-full items-center gap-3 rounded-xl px-3 text-left text-base font-semibold text-deep-green hover:bg-teal/10 disabled:opacity-40 disabled:cursor-not-allowed focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-teal cursor-pointer"
+                  >
+                    <ClipboardList size={18} className="shrink-0 text-teal" aria-hidden="true" />
+                    <span className="flex-1">Match log</span>
+                    {logCount > 0 && (
+                      <span className="inline-flex min-w-6 h-6 items-center justify-center rounded-full bg-pale-sage px-2 text-xs font-bold text-dark-teal">
+                        {logCount}
+                      </span>
+                    )}
+                  </button>
+                )}
+
+                <hr className="my-1.5 border-line" />
+
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={handleLogout}
+                  className="flex min-h-[48px] w-full items-center gap-3 rounded-xl px-3 text-left text-base font-semibold text-deep-green hover:bg-teal/10 focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-teal cursor-pointer"
+                >
+                  <LogOut size={18} className="shrink-0 text-deep-green" aria-hidden="true" />
+                  <span>Sign out</span>
+                </button>
+
+                <hr className="my-1.5 border-line" />
+
+                <button
+                  type="button"
+                  role="menuitem"
+                  disabled={!onAbandonMatch || isGuest}
+                  onClick={() => {
+                    setMenuOpen(false);
+                    onAbandonMatch?.();
+                  }}
+                  className="flex min-h-[48px] w-full items-center gap-3 rounded-xl px-3 text-left text-base font-semibold text-error hover:bg-error/10 disabled:opacity-40 disabled:cursor-not-allowed focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-error cursor-pointer"
+                >
+                  <AlertTriangle size={18} className="shrink-0 text-error" aria-hidden="true" />
+                  <span>Abandon match</span>
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      </header>
+    );
+  }
 
   return (
     <header className="ps-header" {...rest}>

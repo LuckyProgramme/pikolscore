@@ -124,6 +124,7 @@ export function useScoreboard({
         message: res.logEntry.message,
       });
     }
+    return res;
   }, [isGuest, syncState, sync, engineRef]);
 
   const fault = useCallback((reason = null) => {
@@ -134,7 +135,7 @@ export function useScoreboard({
     const cleanReason = typeof reason === 'string' && reason.trim() ? reason.trim() : null;
     const res = engine.fault(elapsedSecondsRef.current, cleanReason);
     audioRef.current?.fault();
-    vibrate([20, 40, 20]);
+    vibrate(15);
     syncState();
 
     if (sync?.isEnabled && res?.logEntry) {
@@ -150,6 +151,7 @@ export function useScoreboard({
         message: res.logEntry.message,
       });
     }
+    return res;
   }, [isGuest, syncState, sync, engineRef]);
 
   const undo = useCallback(() => {

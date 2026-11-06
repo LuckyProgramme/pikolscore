@@ -2,20 +2,17 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { Eye, AlertTriangle, X, Tv } from 'lucide-react';
+import { Eye, AlertTriangle, X, Tv, Trophy, Undo2 } from 'lucide-react';
 import { useScoreboard } from '../../hooks/useScoreboard';
 import { useMatchTimer } from '../../hooks/useMatchTimer';
 import { useMatchSync } from '../../hooks/useMatchSync';
 import { useVoiceScoring } from '../../hooks/useVoiceScoring';
 import Header from '../layout/Header';
-import ConsoleFooter from '../layout/ConsoleFooter';
 import ControlBar from './ControlBar';
 import TeamPanel from './TeamPanel';
-import CallRow from './CallRow';
 import MatchLog from './MatchLog';
 import GameWonModal from './GameWonModal';
 import VoiceDebugOverlay from './VoiceDebugOverlay';
-import CourtQrLobbyModal from './CourtQrLobbyModal';
 import ProjectToScreenModal from './ProjectToScreenModal';
 import { VOICE_CONFIG } from '@/config/voice';
 import { supabase } from '@/config/supabase';
@@ -35,11 +32,12 @@ export function Scoreboard() {
   const [logOpen, setLogOpen] = useState(false);
   const [gameWonModalOpen, setGameWonModalOpen] = useState(false);
   const [isTimeExpired, setIsTimeExpired] = useState(false);
-  const [qrModalExplicitOpen, setQrModalExplicitOpen] = useState(false);
   const [projectModalOpen, setProjectModalOpen] = useState(false);
-  const [umpireDismissedLobby, setUmpireDismissedLobby] = useState(false);
   const [showAbandonModal, setShowAbandonModal] = useState(false);
   const [tvBannerMessage, setTvBannerMessage] = useState('');
+  const [rallyToast, setRallyToast] = useState(null);
+  const rallyToastTimerRef = useRef(null);
+  const abandonCancelBtnRef = useRef(null);
   const pairedTvHandledRef = useRef(false);
 
   // 1. Detect Viewer / Guest State (isGuest disables officiating controls)
@@ -184,11 +182,52 @@ export function Scoreboard() {
       });
   }, [isOwningUmpire, sync?.serverSession]);
 
-  const isQrModalOpen = Boolean(
-    qrModalExplicitOpen ||
-      (sync?.serverSession?.player_names?.lobbyLocked === false &&
-        (!isOwningUmpire || !umpireDismissedLobby))
-  );
+  const showRallyToast = useCallback((message) => {
+    if (!message) return;
+    if (rallyToastTimerRef.current) {
+      clearTimeout(rallyToastTimerRef.current);
+    }
+    setRallyToast({ message, id: Date.now() });
+    rallyToastTimerRef.current = setTimeout(() => {
+      setRallyToast(null);
+      rallyToastTimerRef.current = null;
+    }, 4000);
+  }, []);
+
+  const clearRallyToast = useCallback(() => {
+    if (rallyToastTimerRef.current) {
+      clearTimeout(rallyToastTimerRef.current);
+      rallyToastTimerRef.current = null;
+    }
+    setRallyToast(null);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (rallyToastTimerRef.current) {
+        clearTimeout(rallyToastTimerRef.current);
+      }
+    };
+  }, []);
+
+  // Focus Cancel button by default when Abandon dialog opens & allow Escape to close
+  useEffect(() => {
+    if (!showAbandonModal) return;
+    const focusTimer = setTimeout(() => {
+      abandonCancelBtnRef.current?.focus();
+    }, 20);
+    const handleKey = (e) => {
+      if (e.key === 'Escape') {
+        e.stopPropagation();
+        setShowAbandonModal(false);
+      }
+    };
+    window.addEventListener('keydown', handleKey);
+    return () => {
+      clearTimeout(focusTimer);
+      window.removeEventListener('keydown', handleKey);
+    };
+  }, [showAbandonModal]);
 
   const handleTimerExpireRef = useRef(null);
   const isTransitioningMatchRef = useRef(false);
@@ -207,21 +246,20 @@ export function Scoreboard() {
   }, []);
 
   const handleEscape = useCallback(() => {
-    if (gameWonModalOpen) {
+    if (showAbandonModal) {
+      setShowAbandonModal(false);
+    } else if (gameWonModalOpen) {
       setGameWonModalOpen(false);
     } else if (logOpen) {
       setLogOpen(false);
     }
-  }, [gameWonModalOpen, logOpen]);
+  }, [showAbandonModal, gameWonModalOpen, logOpen]);
 
   const {
     state,
     canUndo,
     canRedo,
     log,
-    gameOver,
-    winnerName,
-    isDraw,
     point,
     fault,
     undo,
@@ -248,7 +286,6 @@ export function Scoreboard() {
         getSynth()?.gameWon();
       }, 500);
     }
-    setGameWonModalOpen(true);
   };
 
   // Automatically trigger match end when timer reaches 0 or hydrates as expired
@@ -263,11 +300,10 @@ export function Scoreboard() {
     }
   }, [timer.status, timer.remainingSeconds, state?.gameOver]);
 
-  // Automatically pause timer and trigger GameWonModal when a team wins
+  // Automatically pause timer when a team wins (inline R11 row appears first; GameWonModal opens on 'View summary')
   useEffect(() => {
     if (state?.gameOver) {
       timer.pause();
-      setGameWonModalOpen(true);
     } else {
       setGameWonModalOpen(false);
     }
@@ -313,6 +349,7 @@ export function Scoreboard() {
 
     setIsTimeExpired(false);
     setGameWonModalOpen(false);
+    clearRallyToast();
 
     try {
       if (sync?.isEnabled && sync.sessionId) {
@@ -333,7 +370,7 @@ export function Scoreboard() {
     } finally {
       isTransitioningMatchRef.current = false;
     }
-  }, [isGuest, reset, timer, sync, state?.gameOver, router]);
+  }, [isGuest, reset, timer, sync, state?.gameOver, router, clearRallyToast]);
 
   const handleGoToMatches = useCallback(async () => {
     const closingSessionId = sync?.sessionId;
@@ -394,14 +431,21 @@ export function Scoreboard() {
 
   const handleUndoWinningPoint = useCallback(() => {
     if (isGuest) return;
+    clearRallyToast();
     undo();
     setGameWonModalOpen(false);
-  }, [isGuest, undo]);
+  }, [isGuest, undo, clearRallyToast]);
 
   const handlePoint = useCallback(
     (reason = null) => {
       if (isGuest || isMatchOver) return;
+      const currentServingIdx = engineRef.current?.servingTeam ?? 0;
+      const currentTeamNames = engineRef.current?.teamNames || ['Team A', 'Team B'];
+      const scoringTeamName = currentTeamNames[currentServingIdx] || 'Serving team';
+
       point(reason);
+      showRallyToast(`Point to ${scoringTeamName}`);
+
       if (!engineRef.current?.gameOver) {
         if (timer.status === 'idle') {
           timer.start();
@@ -410,13 +454,23 @@ export function Scoreboard() {
         }
       }
     },
-    [isGuest, isMatchOver, timer, point]
+    [isGuest, isMatchOver, timer, point, showRallyToast]
   );
 
   const handleFault = useCallback(
     (reason = null) => {
       if (isGuest || isMatchOver) return;
-      fault(reason);
+      const res = fault(reason);
+      const currentTeamNames = engineRef.current?.teamNames || ['Team A', 'Team B'];
+      if (res?.event === 'secondServer') {
+        showRallyToast('Fault · server 2 is up');
+      } else if (res?.event === 'sideOut') {
+        const nextTeamName =
+          currentTeamNames[res.servingTeam ?? engineRef.current?.servingTeam ?? 0] ||
+          'Other team';
+        showRallyToast(`Side-out · ${nextTeamName} serves`);
+      }
+
       if (!engineRef.current?.gameOver) {
         if (timer.status === 'idle') {
           timer.start();
@@ -425,18 +479,20 @@ export function Scoreboard() {
         }
       }
     },
-    [isGuest, isMatchOver, timer, fault]
+    [isGuest, isMatchOver, timer, fault, showRallyToast]
   );
 
   const handleUndo = useCallback(() => {
     if (isGuest) return;
+    clearRallyToast();
     undo();
-  }, [isGuest, undo]);
+  }, [isGuest, undo, clearRallyToast]);
 
   const handleRedo = useCallback(() => {
     if (isGuest || isMatchOver) return;
+    clearRallyToast();
     redo();
-  }, [isGuest, isMatchOver, redo]);
+  }, [isGuest, isMatchOver, redo, clearRallyToast]);
 
   const handleToggleTimer = useCallback(() => {
     if (isGuest) return;
@@ -479,9 +535,26 @@ export function Scoreboard() {
   const teamNames = state?.teamNames || ['Team Omega', 'Team Alpha'];
   const scores = state?.scores || [0, 0];
   const servingTeam = state?.servingTeam ?? 0;
-  const servingTeamKey = state?.servingTeamKey || teamKeys[servingTeam];
   const servingTeamName = state?.servingTeamName || teamNames[servingTeam];
   const serverNumber = state?.serverNumber ?? 2;
+  const winnerIdx =
+    state?.winner !== null && state?.winner !== undefined
+      ? state.winner
+      : isMatchOver
+      ? scores[0] > scores[1]
+        ? 0
+        : scores[1] > scores[0]
+        ? 1
+        : null
+      : null;
+
+  const resolvedCourtNumber =
+    Number(
+      sync?.serverSession?.court_number ||
+        sync?.serverSession?.player_names?.courtNumber ||
+        state?.playerNames?.courtNumber
+    ) || null;
+
   const liveAnnouncement =
     state?.liveAnnouncement ||
     `${servingTeamName} serving. ${scores[servingTeam]}, ${scores[1 - servingTeam]}, ${serverNumber}.`;
@@ -550,17 +623,15 @@ export function Scoreboard() {
 
       {/* 3. Header remains outside the disabled/inert wrapper */}
       <Header
-        onBack={
-          state?.gameOver
-            ? profile?.role === 'player'
-              ? () => router.push('/player')
-              : handleGoToMatches
-            : undefined
+        compactMenu={true}
+        courtNumber={resolvedCourtNumber}
+        logCount={(log?.length || 0) + (sync?.legacyLog?.length || 0)}
+        onAbandonMatch={
+          isOwningUmpire && !isMatchOver ? () => setShowAbandonModal(true) : undefined
         }
-        backLabel={profile?.role === 'player' ? 'Profile' : 'Matches'}
-        onAbandonMatch={isOwningUmpire && !state?.gameOver ? () => setShowAbandonModal(true) : undefined}
-        onOpenProjectModal={isOwningUmpire && sync?.sessionId ? () => setProjectModalOpen(true) : undefined}
-        onOpenQrModal={sync?.sessionId ? () => setQrModalExplicitOpen(true) : undefined}
+        onOpenProjectModal={
+          isOwningUmpire && sync?.sessionId ? () => setProjectModalOpen(true) : undefined
+        }
         onOpenLog={() => !isGuest && setLogOpen(true)}
         profile={profile}
         userEmail={userEmail}
@@ -573,12 +644,12 @@ export function Scoreboard() {
 
       {/* 4. Main scoreboard & game controls put behind glass for guests */}
       <div
-        inert={isGuest || isQrModalOpen || undefined}
+        inert={isGuest || undefined}
         className={`flex-1 flex flex-col min-h-0 ${isGuest ? 'pointer-events-none select-none' : ''}`}
       >
         <main
           className="ps-main"
-          inert={gameWonModalOpen || undefined}
+          inert={gameWonModalOpen || showAbandonModal || undefined}
         >
           <ControlBar
             canUndo={!isGuest && canUndo}
@@ -587,28 +658,48 @@ export function Scoreboard() {
             onRedo={handleRedo}
             formattedTime={timer.formattedTime}
             timerLabel={timer.label}
+            timerStatus={timer.status}
             onToggleTimer={handleToggleTimer}
-            voiceSupported={voice.supported}
-            voiceActive={voice.active}
-            voicePill={voice.pill}
-            onToggleVoice={voice.toggle}
             isGuest={isGuest}
-            isTimeExpired={effectiveTimeExpired}
           />
 
-          {state?.gameOver && !gameWonModalOpen && (
-            <button
-              type="button"
-              className="ps-victory-reopen-bar"
-              onClick={() => !isGuest && setGameWonModalOpen(true)}
-              disabled={isGuest}
+          {/* R11: Match-end inline row with final score, View summary, and New match */}
+          {isMatchOver && (
+            <div
+              role="region"
+              aria-label="Match complete actions"
+              className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-teal bg-pale-sage px-5 py-3 shadow-sm"
             >
-              <span>
-                {state.isDraw
-                  ? `⏰ Match ended in a draw (${scores[0]}–${scores[1]})! Tap to view summary or start new match`
-                  : `🏆 Match won by ${state.winnerName}! Tap to view summary or start new match`}
-              </span>
-            </button>
+              <div className="flex items-center gap-2.5 text-base font-bold text-dark-teal">
+                <Trophy size={20} className="shrink-0 text-teal" aria-hidden="true" />
+                <span>
+                  {winnerIdx === null
+                    ? `Match tied · Final score ${scores[0]}–${scores[1]}`
+                    : `${teamNames[winnerIdx]} wins · Final score ${scores[winnerIdx]}–${
+                        scores[1 - winnerIdx]
+                      }`}
+                </span>
+              </div>
+
+              <div className="flex items-center gap-2.5">
+                <button
+                  type="button"
+                  disabled={isGuest}
+                  onClick={() => !isGuest && setGameWonModalOpen(true)}
+                  className="inline-flex min-h-[44px] items-center justify-center rounded-xl border border-teal bg-ivory px-4 text-sm font-bold text-dark-teal hover:bg-teal/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal cursor-pointer"
+                >
+                  View summary
+                </button>
+                <button
+                  type="button"
+                  disabled={isGuest}
+                  onClick={handleGoToMatches}
+                  className="inline-flex min-h-[44px] items-center justify-center rounded-xl bg-teal px-4 text-sm font-bold text-cream hover:bg-forest-teal focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal cursor-pointer"
+                >
+                  New match
+                </button>
+              </div>
+            </div>
           )}
 
           <div className="ps-teams">
@@ -617,6 +708,12 @@ export function Scoreboard() {
               teamName={teamNames[0]}
               score={scores[0]}
               isServing={servingTeam === 0}
+              serverNumber={serverNumber}
+              players={state?.playerNames?.team0}
+              format={state?.format || 'doubles'}
+              isMatchOver={isMatchOver}
+              isWinner={winnerIdx === 0}
+              isLoser={winnerIdx === 1}
               onPoint={handlePoint}
               onFault={handleFault}
             />
@@ -625,24 +722,43 @@ export function Scoreboard() {
               teamName={teamNames[1]}
               score={scores[1]}
               isServing={servingTeam === 1}
+              serverNumber={serverNumber}
+              players={state?.playerNames?.team1}
+              format={state?.format || 'doubles'}
+              isMatchOver={isMatchOver}
+              isWinner={winnerIdx === 1}
+              isLoser={winnerIdx === 0}
               onPoint={handlePoint}
               onFault={handleFault}
             />
           </div>
-
-          <CallRow
-            servingTeamKey={servingTeamKey}
-            servingTeamName={servingTeamName}
-            serverNumber={serverNumber}
-            format={state?.format || 'doubles'}
-          />
 
           <div className="ps-sr" aria-live="polite">
             {liveAnnouncement}
           </div>
         </main>
 
-        <ConsoleFooter inert={gameWonModalOpen || undefined} />
+        {/* R10: Bottom-centre rally feedback toast (4 seconds) with inline Undo */}
+        {rallyToast && !isGuest && (
+          <div
+            key={rallyToast.id}
+            role="status"
+            aria-live="polite"
+            className="fixed bottom-4 left-1/2 z-30 flex -translate-x-1/2 items-center gap-3 rounded-full border border-teal/30 bg-dark-teal px-5 py-2.5 text-base font-semibold text-ivory shadow-xl"
+          >
+            <span>{rallyToast.message}</span>
+            {canUndo && (
+              <button
+                type="button"
+                onClick={handleUndo}
+                className="inline-flex items-center gap-1.5 rounded-full bg-cream px-3 py-1 text-sm font-bold text-dark-teal hover:bg-ivory focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cream cursor-pointer"
+              >
+                <Undo2 size={14} aria-hidden="true" />
+                <span>Undo</span>
+              </button>
+            )}
+          </div>
+        )}
 
         <MatchLog
           open={logOpen}
@@ -652,7 +768,7 @@ export function Scoreboard() {
           teamNames={teamNames}
           playerNames={state?.playerNames}
           onClose={handleCloseLog}
-          inert={gameWonModalOpen || undefined}
+          inert={gameWonModalOpen || showAbandonModal || undefined}
           voiceMicMode={voice.micMode}
           voiceMicModeSetting={voice.micModeSetting}
           onSetMicModeSetting={voice.setMicModeSetting}
@@ -680,35 +796,12 @@ export function Scoreboard() {
         />
       </div>
 
-      {/* 5. Court QR & Pre-Match Lobby Modal (rendered outside inert/pointer-events-none container) */}
-      {sync?.serverSession && (
-        <CourtQrLobbyModal
-          isOpen={isQrModalOpen}
-          onClose={() => {
-            setQrModalExplicitOpen(false);
-            setUmpireDismissedLobby(true);
-          }}
-          session={sync.serverSession}
-          currentUser={{ id: userId, email: userEmail }}
-          profile={profile}
-          isUmpire={isOwningUmpire}
-          onSessionUpdated={(updated) => {
-            sync.refetchAndRehydrate(updated);
-          }}
-        />
-      )}
-
       {/* 5b. Project to Screen Modal (Available during active match) */}
       {isOwningUmpire && sync?.serverSession && (
         <ProjectToScreenModal
           isOpen={projectModalOpen}
           onClose={() => setProjectModalOpen(false)}
-          courtNumber={
-            Number(
-              sync.serverSession.court_number ||
-                sync.serverSession.player_names?.courtNumber
-            ) || 1
-          }
+          courtNumber={resolvedCourtNumber || 1}
           sessionId={sync.serverSession.id}
           onPaired={(cNum, updated) => {
             if (updated) {
@@ -732,25 +825,26 @@ export function Scoreboard() {
               <AlertTriangle size={24} aria-hidden="true" />
             </div>
             <h3 id="abandon-modal-title" className="text-xl font-bold text-dark-teal mb-2">
-              Abandon Match?
+              Abandon this match?
             </h3>
-            <p className="text-sm text-muted mb-6 leading-relaxed">
-              Abandoning this match will remove all players from the court and free the court for a new match. This action cannot be undone.
+            <p className="text-base text-[#384640] mb-6 leading-relaxed">
+              Abandoning this match will end the match, remove all players from the court, and free the court for a new match. This action cannot be undone.
             </p>
             <div className="flex gap-3">
               <button
+                ref={abandonCancelBtnRef}
                 type="button"
                 onClick={() => setShowAbandonModal(false)}
-                className="flex-1 h-11 rounded-full border border-line bg-off-white text-dark-teal font-semibold text-sm hover:bg-pale-sage cursor-pointer"
+                className="flex-1 min-h-[48px] rounded-full border border-line bg-off-white text-dark-teal font-bold text-base hover:bg-pale-sage focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal cursor-pointer"
               >
                 Cancel
               </button>
               <button
                 type="button"
                 onClick={handleAbandon}
-                className="flex-1 h-11 rounded-full bg-[#BA1A1A] text-white font-semibold text-sm hover:bg-red-800 cursor-pointer border-0"
+                className="flex-1 min-h-[48px] rounded-full bg-error text-white font-bold text-base hover:bg-red-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-error cursor-pointer border-0"
               >
-                Yes, Abandon
+                Abandon match
               </button>
             </div>
           </div>
