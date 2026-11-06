@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Play,
@@ -13,6 +13,8 @@ import {
   Shield,
   Tv,
   Check,
+  ChevronDown,
+  Eye,
 } from 'lucide-react';
 import { supabase } from '@/config/supabase';
 import Header from '@/components/layout/Header';
@@ -54,6 +56,11 @@ export default function MatchesPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [pendingTvId, setPendingTvId] = useState(null);
   const [tvPairedMessage, setTvPairedMessage] = useState('');
+  const [selectedCourt, setSelectedCourt] = useState(null);
+  const [isCourtPickerOpen, setIsCourtPickerOpen] = useState(false);
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [pendingDropdownCourt, setPendingDropdownCourt] = useState(null);
+  const dropdownRef = useRef(null);
   const [, setTick] = useState(0);
 
   // 1. Authenticate user & load profile
@@ -401,6 +408,69 @@ export default function MatchesPage() {
     return null;
   }, [user?.id, courtsData]);
 
+  // Helper to classify each court's status: 'available' | 'occupied' | 'active'
+  const getCourtStatus = useCallback(
+    (courtNum) => {
+      const session = courtsData[courtNum];
+      const assignedUmpireId = getAssignedUmpireId(session);
+      const isMyCourt = Boolean(user?.id && assignedUmpireId === user.id);
+      const isMatchStarted = Boolean(session?.player_names?.lobbyLocked);
+      const hasOtherUmpire = Boolean(assignedUmpireId && !isMyCourt);
+
+      if (isMatchStarted) return 'active';
+      if (hasOtherUmpire) return 'occupied';
+      return 'available';
+    },
+    [courtsData, user?.id]
+  );
+
+  // Sync selectedCourt & initial modal prompt when courts finish loading
+  useEffect(() => {
+    if (isLoadingCourts || !user?.id) return;
+
+    if (myAssignedCourtNumber) {
+      setSelectedCourt(myAssignedCourtNumber);
+      setPendingDropdownCourt(myAssignedCourtNumber);
+      setIsCourtPickerOpen(false);
+      return;
+    }
+
+    // If not assigned and no court selected yet, open the "Choose your court" modal prompt
+    if (!selectedCourt) {
+      const firstAvail =
+        [1, 2, 3, 4].find((c) => getCourtStatus(c) === 'available') || null;
+      setPendingDropdownCourt(firstAvail);
+      setDropdownOpen(true);
+      setIsCourtPickerOpen(true);
+    } else if (getCourtStatus(selectedCourt) !== 'available') {
+      // If the previously selected court became occupied or active by someone else while we were unassigned, re-prompt
+      const firstAvail =
+        [1, 2, 3, 4].find((c) => getCourtStatus(c) === 'available') || null;
+      setSelectedCourt(null);
+      setPendingDropdownCourt(firstAvail);
+      setDropdownOpen(true);
+      setIsCourtPickerOpen(true);
+    }
+  }, [
+    isLoadingCourts,
+    user?.id,
+    myAssignedCourtNumber,
+    selectedCourt,
+    getCourtStatus,
+  ]);
+
+  // Close custom dropdown inside modal on outside click
+  useEffect(() => {
+    if (!dropdownOpen) return;
+    const handleOutside = (e) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
+        setDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleOutside);
+    return () => document.removeEventListener('mousedown', handleOutside);
+  }, [dropdownOpen]);
+
   // If the umpire scanned a TV QR and is already assigned to a court, auto-pair immediately!
   useEffect(() => {
     if (!user?.id || isLoadingCourts || !pendingTvId || !myAssignedCourtNumber || isSubmitting) {
@@ -431,6 +501,391 @@ export default function MatchesPage() {
     return <AuthLoadingSplash label="Loading courtside umpire hub..." />;
   }
 
+  const activeCourtNum = myAssignedCourtNumber || selectedCourt;
+  const displayCourtNum =
+    activeCourtNum ||
+    pendingDropdownCourt ||
+    [1, 2, 3, 4].find((c) => getCourtStatus(c) === 'available') ||
+    1;
+
+  // Other courts for the Right Sidebar ("Other Courts · Live venue status")
+  const sidebarCourts = [1, 2, 3, 4]
+    .filter((cNum) => cNum !== displayCourtNum)
+    .map((cNum) => ({
+      courtNum: cNum,
+      session: courtsData[cNum],
+      status: getCourtStatus(cNum),
+    }))
+    .sort((a, b) => {
+      const rank = { active: 0, occupied: 1, available: 2 };
+      return (rank[a.status] ?? 3) - (rank[b.status] ?? 3) || a.courtNum - b.courtNum;
+    });
+
+  const renderTeamColumn = (courtNum, teamIdx, teamLabel, teamSlots, isMyCourt) => {
+    const teamReadyCount =
+      (teamSlots[0]?.name?.trim() ? 1 : 0) + (teamSlots[1]?.name?.trim() ? 1 : 0);
+
+    return (
+      <div
+        className={`p-5 sm:p-6 flex flex-col gap-3 ${
+          teamIdx === 0
+            ? 'border-b sm:border-b-0 sm:border-r border-[#E2E5DC]'
+            : ''
+        }`}
+      >
+        <div className="flex items-center justify-between">
+          <span className="text-[15px] font-extrabold text-[#084B46] tracking-[-0.01em]">
+            {teamLabel}
+          </span>
+          <span className="text-xs font-bold text-[#0F5C62] bg-[#EAF0E5] px-2.5 py-0.5 rounded-full">
+            {teamReadyCount}/2 Ready
+          </span>
+        </div>
+
+        {[0, 1].map((sIdx) => {
+          const slot = teamSlots[sIdx];
+          const hasPlayer = Boolean(slot?.name?.trim());
+          const isAdding =
+            activeWalkup?.courtNumber === courtNum &&
+            activeWalkup?.team === teamIdx &&
+            activeWalkup?.slotIndex === sIdx;
+
+          if (hasPlayer) {
+            return (
+              <div
+                key={`t${teamIdx}-${sIdx}`}
+                className="h-[46px] px-3.5 rounded-xl bg-[#EAF0E5] border-[1.5px] border-[#0F5C62]/20 text-[#084B46] font-bold text-sm flex items-center justify-between gap-2 transition-all"
+              >
+                <div className="flex items-center min-w-0">
+                  <span className="w-[22px] h-[22px] rounded-md bg-[#0F5C62]/15 text-[#084B46] text-[11px] font-extrabold inline-flex items-center justify-center mr-2.5 shrink-0">
+                    {sIdx + 1}
+                  </span>
+                  <span className="truncate">{slot.name}</span>
+                </div>
+                {isMyCourt && (
+                  <button
+                    type="button"
+                    onClick={() => handleSetWalkupSlot(courtNum, teamIdx, sIdx, '')}
+                    className="text-[#748079] hover:text-[#BA1A1A] p-1 bg-transparent border-0 cursor-pointer shrink-0"
+                    title="Remove player"
+                  >
+                    <X size={15} />
+                  </button>
+                )}
+              </div>
+            );
+          }
+
+          if (isAdding) {
+            return (
+              <div
+                key={`t${teamIdx}-${sIdx}`}
+                className="h-[46px] px-2.5 rounded-xl bg-[#FAF9F5] border-[1.5px] border-[#0F5C62] flex items-center gap-1.5"
+              >
+                <span className="w-[22px] h-[22px] rounded-md bg-[#0F5C62]/12 text-[#084B46] text-[11px] font-extrabold inline-flex items-center justify-center shrink-0">
+                  {sIdx + 1}
+                </span>
+                <input
+                  type="text"
+                  autoFocus
+                  placeholder="Walk-up player name"
+                  value={walkupName}
+                  onChange={(e) => setWalkupName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      handleSetWalkupSlot(courtNum, teamIdx, sIdx, walkupName);
+                    } else if (e.key === 'Escape') {
+                      setActiveWalkup(null);
+                    }
+                  }}
+                  className="h-8 flex-1 min-w-0 rounded-lg bg-white border border-[#E2E5DC] px-2.5 text-xs font-semibold text-[#084B46] outline-none"
+                />
+                <button
+                  type="button"
+                  onClick={() => handleSetWalkupSlot(courtNum, teamIdx, sIdx, walkupName)}
+                  className="h-8 px-2.5 rounded-lg bg-[#0F5C62] text-xs font-bold text-[#FEECD6] border-0 cursor-pointer"
+                >
+                  Add
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveWalkup(null)}
+                  className="h-8 px-1.5 text-xs text-[#748079] hover:text-[#084B46] bg-transparent border-0 cursor-pointer"
+                >
+                  <X size={14} />
+                </button>
+              </div>
+            );
+          }
+
+          return (
+            <div
+              key={`t${teamIdx}-${sIdx}`}
+              className="h-[46px] px-3.5 rounded-xl bg-[#FAF9F5] border-[1.5px] border-dashed border-[#E2E5DC] text-[#748079] font-medium text-sm flex items-center justify-between gap-2 transition-all"
+            >
+              <div className="flex items-center">
+                <span className="w-[22px] h-[22px] rounded-md bg-[#0F5C62]/10 text-[#084B46] text-[11px] font-extrabold inline-flex items-center justify-center mr-2.5 shrink-0">
+                  {sIdx + 1}
+                </span>
+                <span>Open slot</span>
+              </div>
+              <button
+                type="button"
+                disabled={!isMyCourt}
+                onClick={() => {
+                  if (!isMyCourt) return;
+                  setActiveWalkup({ courtNumber: courtNum, team: teamIdx, slotIndex: sIdx });
+                  setWalkupName('');
+                }}
+                className="bg-[#FEFEFB] border border-[#E2E5DC] text-[#0F5C62] font-bold text-xs px-2.5 py-1 rounded-lg enabled:hover:bg-[#EAF0E5] enabled:hover:border-[#0F5C62] transition-colors cursor-pointer disabled:opacity-45 disabled:cursor-not-allowed inline-flex items-center gap-1"
+              >
+                <Plus size={12} />
+                <span>Walk-up</span>
+              </button>
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
+
+  const renderSelectedCourtCard = (courtNum) => {
+    if (!courtNum) return null;
+    const session = courtsData[courtNum];
+    const assignedUmpireId = getAssignedUmpireId(session);
+    const isMyCourt = Boolean(user?.id && assignedUmpireId === user.id);
+    const isMatchStarted = Boolean(session?.player_names?.lobbyLocked);
+    const umpireName = session?.player_names?.umpireName;
+    const hasOtherUmpire = Boolean(assignedUmpireId && !isMyCourt);
+
+    // Derive slots
+    const pNames = session?.player_names || {};
+    const slots = pNames.slots || { team0: [null, null], team1: [null, null] };
+    const team0Slots = slots.team0 || [null, null];
+    const team1Slots = slots.team1 || [null, null];
+
+    // Filled slots count
+    const filledCount =
+      (team0Slots[0]?.name ? 1 : 0) +
+      (team0Slots[1]?.name ? 1 : 0) +
+      (team1Slots[0]?.name ? 1 : 0) +
+      (team1Slots[1]?.name ? 1 : 0);
+    const isFull = filledCount === 4;
+
+    return (
+      <section
+        key={courtNum}
+        className={`rounded-3xl border-[1.5px] bg-[#FEFEFB] overflow-hidden shadow-[0_10px_30px_-12px_rgba(8,75,70,0.08)] transition-all ${
+          isMyCourt ? 'border-[#0F5C62]' : 'border-[#E2E5DC]'
+        }`}
+      >
+        {/* Unified Card Header + Court Switcher */}
+        <div className="px-5 sm:px-6 py-5 bg-[#FEFEFB] border-b border-[#E2E5DC] flex items-center justify-between gap-4 flex-wrap">
+          <div className="flex items-center gap-3.5">
+            <div className="flex h-11 w-11 items-center justify-center rounded-[14px] font-extrabold text-xl bg-[#0F5C62] text-[#FEECD6] shrink-0">
+              {courtNum}
+            </div>
+            <div>
+              <h2 className="text-[22px] font-extrabold text-[#084B46] m-0 leading-tight">
+                Court {courtNum}
+              </h2>
+
+              <div className="flex items-center gap-2 text-[13px] font-semibold text-[#384640] mt-0.5 flex-wrap">
+                {isMyCourt ? (
+                  <>
+                    <span className="inline-flex items-center gap-1.5">
+                      <span className="size-2 rounded-full bg-[#0F5C62]" />
+                      <span>Officiating: You</span>
+                    </span>
+                    <span className="text-[#748079]">·</span>
+                    <span>{filledCount}/4 Players Ready</span>
+                  </>
+                ) : hasOtherUmpire ? (
+                  <>
+                    <span className="inline-flex items-center gap-1.5 text-[#748079]">
+                      <span className="size-2 rounded-full bg-[#748079]" />
+                      <span>Officiating: {umpireName || 'Another Umpire'}</span>
+                    </span>
+                    <span className="text-[#748079]">·</span>
+                    <span>{filledCount}/4 Players Ready</span>
+                  </>
+                ) : (
+                  <>
+                    <span className="inline-flex items-center gap-1.5">
+                      <span className="size-2 rounded-full bg-[#0F5C62]" />
+                      <span>Available court</span>
+                    </span>
+                    <span className="text-[#748079]">·</span>
+                    <span>{filledCount}/4 Players Ready</span>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Header Utilities: Change Court / Leave Court, Project to Screen & Court QR */}
+          <div className="flex items-center gap-2 flex-wrap">
+            {isMyCourt && !isMatchStarted ? (
+              <button
+                type="button"
+                disabled={isSubmitting}
+                onClick={() => handleLeaveCourt(courtNum)}
+                className="h-[38px] px-3.5 rounded-full bg-[#FAF9F5] border-[1.5px] border-[#BA1A1A]/35 text-[13px] font-bold text-[#BA1A1A] enabled:hover:bg-red-50 enabled:hover:border-[#BA1A1A] transition-colors inline-flex items-center gap-1.5 cursor-pointer disabled:opacity-45 disabled:cursor-not-allowed"
+                title={`Leave Court ${courtNum}`}
+              >
+                <X size={14} />
+                <span>Leave Court</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                disabled={Boolean(myAssignedCourtNumber)}
+                onClick={() => {
+                  if (myAssignedCourtNumber) return;
+                  setPendingDropdownCourt(courtNum);
+                  setDropdownOpen(true);
+                  setIsCourtPickerOpen(true);
+                }}
+                className="h-[38px] px-3.5 rounded-full bg-[#FAF9F5] border-[1.5px] border-[#E2E5DC] text-[13px] font-bold text-[#084B46] enabled:hover:bg-[#EAF0E5] enabled:hover:border-[#0F5C62] transition-colors inline-flex items-center gap-1.5 cursor-pointer disabled:opacity-45 disabled:cursor-not-allowed"
+                title="Choose a different available court"
+              >
+                <ChevronDown size={14} />
+                <span>Change Court</span>
+              </button>
+            )}
+            <button
+              type="button"
+              disabled={!isMyCourt}
+              onClick={() => isMyCourt && setProjectModalCourtNum(courtNum)}
+              className="h-[38px] px-3.5 rounded-full bg-[#FAF9F5] border-[1.5px] border-[#E2E5DC] text-[13px] font-bold text-[#084B46] enabled:hover:bg-[#EAF0E5] enabled:hover:border-[#0F5C62] transition-colors inline-flex items-center gap-1.5 cursor-pointer disabled:opacity-45 disabled:cursor-not-allowed"
+              title={
+                isMyCourt
+                  ? `Project Court ${courtNum} to a TV Screen`
+                  : 'Join as umpire first to project this court to a TV screen'
+              }
+            >
+              <Tv size={14} />
+              <span>Project to Screen</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setQrModalCourtNum(courtNum)}
+              className="h-[38px] px-3.5 rounded-full bg-[#FAF9F5] border-[1.5px] border-[#E2E5DC] text-[13px] font-bold text-[#084B46] hover:bg-[#EAF0E5] hover:border-[#0F5C62] transition-colors inline-flex items-center gap-1.5 cursor-pointer"
+              title={`View QR Code for Court ${courtNum}`}
+            >
+              <QrCode size={14} />
+              <span>Court QR</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Flattened 2-Column Court Roster Sheet */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 border-b border-[#E2E5DC]">
+          {renderTeamColumn(courtNum, 0, 'Team A', team0Slots, isMyCourt)}
+          {renderTeamColumn(courtNum, 1, 'Team B', team1Slots, isMyCourt)}
+        </div>
+
+        {/* Compact Single-Row First Serve Strip */}
+        <div className="px-5 sm:px-6 py-4 bg-[#FAF9F5] border-b border-[#E2E5DC] flex items-center justify-between gap-4 flex-wrap">
+          <span className="text-sm font-bold text-[#084B46]">
+            First serving team
+          </span>
+          <div className="flex items-center gap-2.5 flex-wrap">
+            <div className="inline-flex bg-[#FEFEFB] border-[1.5px] border-[#E2E5DC] p-[3px] rounded-xl">
+              <button
+                type="button"
+                disabled={!isMyCourt}
+                onClick={() =>
+                  isMyCourt && setFirstServerMap((prev) => ({ ...prev, [courtNum]: 0 }))
+                }
+                className={`px-[18px] py-[7px] rounded-[9px] text-[13px] font-bold transition-colors border-0 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
+                  firstServerMap[courtNum] === 0
+                    ? 'bg-[#0F5C62] text-[#FEECD6]'
+                    : 'bg-transparent text-[#384640] enabled:hover:text-[#084B46]'
+                }`}
+              >
+                Team A
+              </button>
+              <button
+                type="button"
+                disabled={!isMyCourt}
+                onClick={() =>
+                  isMyCourt && setFirstServerMap((prev) => ({ ...prev, [courtNum]: 1 }))
+                }
+                className={`px-[18px] py-[7px] rounded-[9px] text-[13px] font-bold transition-colors border-0 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
+                  firstServerMap[courtNum] === 1
+                    ? 'bg-[#0F5C62] text-[#FEECD6]'
+                    : 'bg-transparent text-[#384640] enabled:hover:text-[#084B46]'
+                }`}
+              >
+                Team B
+              </button>
+            </div>
+
+            <button
+              type="button"
+              disabled={!isMyCourt}
+              onClick={() => isMyCourt && handleRandomizeServer(courtNum)}
+              className="h-[38px] px-3.5 rounded-xl border-[1.5px] border-[#E2E5DC] bg-[#FEFEFB] text-[#0F5C62] text-xs font-bold inline-flex items-center gap-1.5 enabled:hover:bg-[#EAF0E5] enabled:hover:border-[#0F5C62] transition-colors cursor-pointer disabled:opacity-45 disabled:cursor-not-allowed"
+            >
+              <Shuffle size={13} />
+              <span>Randomize</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Bottom Primary Action CTA */}
+        <div className="p-5 sm:px-6 bg-[#FEFEFB]">
+          {!isMyCourt && !hasOtherUmpire && !isMatchStarted ? (
+            <button
+              type="button"
+              disabled={isSubmitting || Boolean(myAssignedCourtNumber)}
+              onClick={() => handleJoinCourt(courtNum)}
+              className="h-[52px] w-full rounded-2xl bg-[#0F5C62] text-[#FEECD6] text-base font-extrabold hover:bg-[#085953] transition-colors cursor-pointer disabled:opacity-45 disabled:cursor-not-allowed border-0 shadow-[0_6px_16px_-4px_rgba(15,92,98,0.35)] flex items-center justify-center gap-2.5"
+            >
+              {isSubmitting ? (
+                <>
+                  <Loader2 size={18} className="animate-spin" />
+                  <span>Joining Court {courtNum}...</span>
+                </>
+              ) : (
+                <>
+                  <Shield size={18} />
+                  <span>Join Court {courtNum} as Umpire</span>
+                </>
+              )}
+            </button>
+          ) : (
+            <button
+              type="button"
+              disabled={!isMyCourt || !isFull || isSubmitting}
+              onClick={() => handleStartMatch(courtNum)}
+              className={`h-[52px] w-full rounded-2xl text-base font-extrabold transition-colors cursor-pointer border-0 flex items-center justify-center gap-2.5 ${
+                isMyCourt && isFull
+                  ? 'bg-[#0F5C62] text-[#FEECD6] hover:bg-[#085953] shadow-[0_6px_16px_-4px_rgba(15,92,98,0.35)]'
+                  : 'bg-[#E2E5DC] text-[#384640] cursor-not-allowed'
+              }`}
+            >
+              {isSubmitting ? (
+                <>
+                  <Loader2 size={18} className="animate-spin" />
+                  <span>Starting Match...</span>
+                </>
+              ) : isFull ? (
+                <>
+                  <Play size={17} fill="currentColor" />
+                  <span>Start Match (30:00)</span>
+                </>
+              ) : (
+                <span>Waiting for 4 Players ({filledCount}/4 Ready)</span>
+              )}
+            </button>
+          )}
+        </div>
+      </section>
+    );
+  };
+
   return (
     <div className="ps-shell min-h-screen flex flex-col bg-[#FAF9F5] text-[#203F39]">
       {/* 1. Header */}
@@ -442,37 +897,17 @@ export default function MatchesPage() {
       />
 
       {/* 2. Main Workspace */}
-      <main className="flex-1 w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Page Title & Status Banner */}
-        <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <main className="flex-1 w-full max-w-[1200px] mx-auto px-4 sm:px-8 pt-7 pb-12">
+        {/* Clean Page Header */}
+        <div className="mb-5 flex items-end justify-between gap-4 flex-wrap">
           <div>
-            <div className="flex items-center gap-2">
-              <span className="rounded-full bg-[#EAF0E5] px-3 py-1 text-xs font-bold uppercase tracking-wider text-[#0F5C62] border border-[#E2E5DC]">
-                4 Fixed Courts
-              </span>
-              <span className="text-xs text-[#748079]">Doubles Format (2 vs 2)</span>
-            </div>
-            <h1 className="text-3xl font-bold tracking-tight text-[#084B46] mt-1">
+            <h1 className="text-[28px] font-extrabold tracking-[-0.02em] text-[#084B46] m-0">
               Umpire Court Hub
             </h1>
-            <p className="mt-1 text-sm text-[#748079]">
-              Join a court as its official umpire to supervise player arrival, manage walk-ups, and officiate.
+            <p className="mt-0.5 text-sm text-[#748079]">
+              Select an available court to manage player walk-ups, pair a TV screen, and start the match.
             </p>
           </div>
-
-          {myAssignedCourtNumber && (
-            <div className="flex items-center gap-3 bg-[#EAF0E5] border border-[#0F5C62]/30 px-4 py-2.5 rounded-2xl">
-              <Shield size={18} className="text-[#0F5C62] shrink-0" />
-              <div>
-                <div className="text-xs font-bold text-[#084B46]">
-                  Assigned to Court {myAssignedCourtNumber}
-                </div>
-                <div className="text-[11px] text-[#748079]">
-                  Single-court rule: Finish or leave before joining another court.
-                </div>
-              </div>
-            </div>
-          )}
         </div>
 
         {/* TV Paired Confirmation Banner */}
@@ -498,7 +933,7 @@ export default function MatchesPage() {
           </div>
         )}
 
-        {/* Pending TV Pairing Selection Banner (when Umpire is not yet assigned to a court) */}
+        {/* Pending TV Pairing Selection Banner */}
         {pendingTvId && !myAssignedCourtNumber && (
           <div
             role="region"
@@ -518,7 +953,7 @@ export default function MatchesPage() {
                     Select a Court to Display on the TV Screen
                   </h2>
                   <p className="text-xs text-[#EAF0E5]/80 m-0 mt-0.5">
-                    Tap a court below (or click &ldquo;Join as Umpire&rdquo; on any court card) to link the TV and join as its supervising umpire.
+                    Tap a court below to link the TV and join as its supervising umpire.
                   </p>
                 </div>
               </div>
@@ -576,469 +1011,360 @@ export default function MatchesPage() {
           </div>
         )}
 
-        {/* 4 Fixed Courts Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
-          {[1, 2, 3, 4].map((courtNum) => {
-            const session = courtsData[courtNum];
-            const assignedUmpireId = getAssignedUmpireId(session);
-            const isMyCourt = Boolean(user?.id && assignedUmpireId === user.id);
-            const isMatchStarted = Boolean(session?.player_names?.lobbyLocked);
-            const umpireName = session?.player_names?.umpireName;
-            const hasOtherUmpire = Boolean(assignedUmpireId && !isMyCourt);
+        {/* Main Two-Column Layout: Selected Court Sheet (Left) + Live Venue Sidebar (Right) */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+          {/* Left Column: Selected Court Card */}
+          <div className="lg:col-span-8">
+            {renderSelectedCourtCard(displayCourtNum)}
+          </div>
 
-            // Derive slots
-            const pNames = session?.player_names || {};
-            const slots = pNames.slots || { team0: [null, null], team1: [null, null] };
-            const team0Slots = slots.team0 || [null, null];
-            const team1Slots = slots.team1 || [null, null];
+          {/* Right Sidebar: Other Courts (Live Venue Status) */}
+          <aside
+            aria-label="Other courts live venue status"
+            className="lg:col-span-4 rounded-3xl border-[1.5px] border-[#E2E5DC] bg-[#FEFEFB] p-5 flex flex-col gap-3.5"
+          >
+            <div className="flex items-center justify-between pb-3 border-b border-[#E2E5DC]">
+              <h2 className="text-base font-extrabold text-[#084B46] m-0">
+                Other Courts
+              </h2>
+              <span className="text-xs font-semibold text-[#748079]">
+                Live venue status
+              </span>
+            </div>
 
-            // Filled slots count
-            const filledCount =
-              (team0Slots[0]?.name ? 1 : 0) +
-              (team0Slots[1]?.name ? 1 : 0) +
-              (team1Slots[0]?.name ? 1 : 0) +
-              (team1Slots[1]?.name ? 1 : 0);
-            const isFull = filledCount === 4;
+            <div className="flex flex-col gap-3">
+              {sidebarCourts.map(({ courtNum: cNum, session, status }) => {
+                const isMatchActive = status === 'active';
+                const isOccupied = status === 'occupied';
+                const umpireName = session?.player_names?.umpireName || 'Official Umpire';
+                const slots = session?.player_names?.slots || {
+                  team0: [null, null],
+                  team1: [null, null],
+                };
+                const filled =
+                  (slots.team0?.[0]?.name ? 1 : 0) +
+                  (slots.team0?.[1]?.name ? 1 : 0) +
+                  (slots.team1?.[0]?.name ? 1 : 0) +
+                  (slots.team1?.[1]?.name ? 1 : 0);
 
-            // Timer display if match is started
-            const timerEndsAt = session?.timer_ends_at;
-            let timerDisplay = '30:00';
-            if (isMatchStarted && timerEndsAt) {
-              const remMs = Math.max(0, new Date(timerEndsAt).getTime() - Date.now());
-              timerDisplay = formatMmSs(Math.ceil(remMs / 1000));
-            }
+                let timerDisplay = '30:00';
+                if (isMatchActive && session?.timer_ends_at) {
+                  const remMs = Math.max(
+                    0,
+                    new Date(session.timer_ends_at).getTime() - Date.now()
+                  );
+                  timerDisplay = formatMmSs(Math.ceil(remMs / 1000));
+                }
 
-            return (
-              <div
-                key={courtNum}
-                className={`rounded-3xl border-[1.5px] p-6 sm:p-7 shadow-[0_4px_16px_-4px_rgba(8,75,70,0.06)] transition-all flex flex-col gap-5 ${
-                  isMyCourt
-                    ? 'bg-[#FEFEFB] border-[#0F5C62] ring-2 ring-[#0F5C62]/20'
-                    : 'bg-[#FEFEFB] border-[#E2E5DC]'
-                }`}
-              >
-                {/* Court Card Header */}
-                <div className="flex items-center justify-between pb-4 border-b border-[#E2E5DC]">
-                  <div className="flex items-center gap-3">
+                if (isMatchActive) {
+                  const score0 = String(session?.score_team0 ?? 0).padStart(2, '0');
+                  const score1 = String(session?.score_team1 ?? 0).padStart(2, '0');
+                  return (
                     <div
-                      className={`flex h-11 w-11 items-center justify-center rounded-2xl font-black text-lg ${
-                        isMyCourt
-                          ? 'bg-[#0F5C62] text-[#FEECD6]'
-                          : 'bg-[#EAF0E5] text-[#084B46]'
-                      }`}
+                      key={`sidebar-court-${cNum}`}
+                      className="rounded-[18px] border-[1.5px] border-[#FED7AA] bg-[#FFF7ED] p-4 flex flex-col gap-3"
                     >
-                      {courtNum}
-                    </div>
-                    <div>
-                      <h2 className="text-xl font-bold text-[#084B46] tracking-tight m-0">
-                        Court {courtNum}
-                      </h2>
-                      <div className="flex items-center gap-2 mt-0.5">
-                        {isMatchStarted ? (
-                          <span className="inline-flex items-center gap-1.5 text-xs font-bold text-[#BA1A1A]">
-                            <span className="w-2 h-2 rounded-full bg-[#BA1A1A] animate-ping" />
-                            Match in Progress ({timerDisplay})
-                          </span>
-                        ) : filledCount > 0 ? (
-                          <span className="text-xs font-semibold text-[#0F5C62]">
-                            Lobby Open · {filledCount}/4 Players
-                          </span>
-                        ) : (
-                          <span className="text-xs text-[#748079]">Available Court</span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2.5">
+                          <div className="flex h-[34px] w-[34px] items-center justify-center rounded-[10px] bg-[#EA580C] text-white text-[15px] font-extrabold shrink-0">
+                            {cNum}
+                          </div>
+                          <div>
+                            <div className="text-[15px] font-extrabold text-[#084B46]">
+                              Court {cNum}
+                            </div>
+                            <div className="text-xs text-[#748079]">
+                              Umpire: {umpireName}
+                            </div>
+                          </div>
+                        </div>
 
-                  {/* QR Code & Project to Screen Action Buttons */}
-                  <div className="flex items-center gap-2 flex-wrap justify-end">
-                    {isMyCourt && (
+                        <span className="inline-flex items-center gap-1.5 rounded-full bg-[#FFEDD5] px-2.5 py-1 text-[11px] font-extrabold text-[#C2410C]">
+                          <span className="size-2 rounded-full bg-[#EA580C]" />
+                          <span>Active · {timerDisplay}</span>
+                        </span>
+                      </div>
+
+                      <div className="rounded-xl bg-white border border-[#FED7AA] px-3.5 py-2.5 flex items-center justify-between">
+                        <div className="flex flex-col gap-0.5">
+                          <span className="text-[11px] font-bold uppercase text-[#748079] truncate max-w-[100px]">
+                            {session?.team_names?.[0] || 'TEAM A'}
+                          </span>
+                          <span className="text-[22px] font-extrabold text-[#084B46] leading-none tabular-nums">
+                            {score0}
+                          </span>
+                        </div>
+                        <span className="text-xs font-bold text-[#748079]">vs</span>
+                        <div className="flex flex-col gap-0.5 text-right">
+                          <span className="text-[11px] font-bold uppercase text-[#748079] truncate max-w-[100px]">
+                            {session?.team_names?.[1] || 'TEAM B'}
+                          </span>
+                          <span className="text-[22px] font-extrabold text-[#084B46] leading-none tabular-nums">
+                            {score1}
+                          </span>
+                        </div>
+                      </div>
+
                       <button
                         type="button"
-                        onClick={() => setProjectModalCourtNum(courtNum)}
-                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#0F5C62] border border-[#0F5C62] text-xs font-bold text-[#FEECD6] hover:bg-[#085953] transition-colors cursor-pointer shadow-sm"
-                        title={`Project Court ${courtNum} to a TV Screen`}
+                        onClick={() => router.push(`/pikolscore?session=${session.id}`)}
+                        className="h-9 w-full flex items-center justify-center gap-1.5 rounded-[10px] bg-[#EA580C] text-white text-xs font-bold hover:bg-[#C2410C] transition-colors cursor-pointer border-0"
                       >
-                        <Tv size={14} />
-                        <span>Project to Screen</span>
+                        <Eye size={14} />
+                        <span>Spectate Match</span>
                       </button>
-                    )}
-                    <button
-                      type="button"
-                      onClick={() => setQrModalCourtNum(courtNum)}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#FAF9F5] border border-[#E2E5DC] text-xs font-semibold text-[#084B46] hover:bg-[#EAF0E5] transition-colors cursor-pointer"
-                      title={`View QR Code for Court ${courtNum}`}
-                    >
-                      <QrCode size={14} />
-                      <span>Court QR</span>
-                    </button>
-                  </div>
-                </div>
+                    </div>
+                  );
+                }
 
-                {/* Umpire Assignment Status */}
-                <div className="flex items-center justify-between p-3 rounded-2xl bg-[#FAF9F5] border border-[#E2E5DC]">
-                  <div className="flex items-center gap-2 text-xs">
-                    <Shield
-                      size={15}
-                      className={
-                        isMyCourt
-                          ? 'text-[#0F5C62]'
-                          : hasOtherUmpire
-                          ? 'text-[#748079]'
-                          : 'text-[#D97706]'
-                      }
-                    />
-                    <span className="font-semibold text-[#203F39]">
-                      {isMyCourt
-                        ? 'Officiating: You'
-                        : hasOtherUmpire
-                        ? `Officiating: ${umpireName || 'Another Umpire'}`
-                        : 'No Umpire Assigned'}
+                if (isOccupied) {
+                  return (
+                    <div
+                      key={`sidebar-court-${cNum}`}
+                      className="px-3.5 py-[13px] rounded-2xl bg-[#FAF9F5] border border-[#E2E5DC] flex items-center justify-between gap-2"
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className="flex h-[34px] w-[34px] items-center justify-center rounded-[10px] bg-[#E2E5DC] text-[#384640] text-[15px] font-extrabold shrink-0">
+                          {cNum}
+                        </div>
+                        <div className="min-w-0">
+                          <div className="text-sm font-extrabold text-[#084B46]">
+                            Court {cNum}
+                          </div>
+                          <div className="text-xs text-[#748079] truncate">
+                            Umpire: {umpireName} · {filled}/4 players
+                          </div>
+                        </div>
+                      </div>
+
+                      <span className="inline-flex items-center gap-1.5 rounded-full bg-[#E2E5DC] px-2.5 py-1 text-[11px] font-bold text-[#384640] shrink-0">
+                        <span className="size-2 rounded-full bg-[#748079]" />
+                        <span>Occupied</span>
+                      </span>
+                    </div>
+                  );
+                }
+
+                return (
+                  <button
+                    key={`sidebar-court-${cNum}`}
+                    type="button"
+                    disabled={Boolean(myAssignedCourtNumber)}
+                    onClick={() => {
+                      if (myAssignedCourtNumber) return;
+                      setSelectedCourt(cNum);
+                    }}
+                    title={
+                      myAssignedCourtNumber
+                        ? `Leave Court ${myAssignedCourtNumber} first to switch courts`
+                        : `Switch to Court ${cNum}`
+                    }
+                    className="w-full text-left px-3.5 py-[13px] rounded-2xl bg-[#FAF9F5] border border-[#E2E5DC] enabled:hover:border-[#0F5C62] enabled:hover:bg-[#EAF0E5]/50 transition-colors flex items-center justify-between gap-2 cursor-pointer disabled:cursor-default"
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className="flex h-[34px] w-[34px] items-center justify-center rounded-[10px] bg-[#EAF0E5] text-[#0F5C62] text-[15px] font-extrabold shrink-0">
+                        {cNum}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="text-sm font-extrabold text-[#084B46]">
+                          Court {cNum}
+                        </div>
+                        <div className="text-xs text-[#748079] truncate">
+                          No umpire assigned · {filled}/4 players
+                        </div>
+                      </div>
+                    </div>
+
+                    <span className="inline-flex items-center gap-1.5 rounded-full bg-[#EAF0E5] px-2.5 py-1 text-[11px] font-bold text-[#0F5C62] shrink-0">
+                      <span className="size-2 rounded-full bg-[#0F5C62]" />
+                      <span>Available</span>
                     </span>
-                  </div>
-
-                  {/* Umpire Join / Leave Buttons */}
-                  <div>
-                    {isMyCourt ? (
-                      !isMatchStarted && (
-                        <button
-                          type="button"
-                          onClick={() => handleLeaveCourt(courtNum)}
-                          disabled={isSubmitting}
-                          className="text-xs font-bold text-[#BA1A1A] hover:underline bg-transparent border-0 cursor-pointer"
-                        >
-                          Leave Court
-                        </button>
-                      )
-                    ) : !hasOtherUmpire && !isMatchStarted ? (
-                      <button
-                        type="button"
-                        onClick={() => handleJoinCourt(courtNum)}
-                        disabled={isSubmitting || Boolean(myAssignedCourtNumber)}
-                        title={
-                          myAssignedCourtNumber
-                            ? `You must leave Court ${myAssignedCourtNumber} first`
-                            : 'Join as official umpire for this court'
-                        }
-                        className="px-3 py-1.5 rounded-full bg-[#0F5C62] text-[#FEECD6] text-xs font-bold hover:bg-[#085953] transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed border-0"
-                      >
-                        Join as Umpire
-                      </button>
-                    ) : null}
-                  </div>
-                </div>
-
-                {/* VIEW A: Match in Progress on this court */}
-                {isMatchStarted ? (
-                  <div className="flex flex-col gap-4">
-                    {/* Score summary block */}
-                    <div className="grid grid-cols-2 gap-3 p-4 rounded-2xl bg-[#EAF0E5]/60 border border-[#E2E5DC] text-center">
-                      <div className="flex flex-col items-center">
-                        <span className="text-xs font-bold text-[#748079] uppercase">
-                          {session.team_names?.[0] || 'Team A'}
-                        </span>
-                        <span className="font-mono text-3xl font-black text-[#084B46] mt-1">
-                          {session.score_team0 ?? 0}
-                        </span>
-                      </div>
-                      <div className="flex flex-col items-center border-l border-[#E2E5DC]">
-                        <span className="text-xs font-bold text-[#748079] uppercase">
-                          {session.team_names?.[1] || 'Team B'}
-                        </span>
-                        <span className="font-mono text-3xl font-black text-[#084B46] mt-1">
-                          {session.score_team1 ?? 0}
-                        </span>
-                      </div>
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={() => router.push(`/pikolscore?session=${session.id}`)}
-                      className="h-12 w-full flex items-center justify-center gap-2 rounded-full bg-[#0F5C62] text-[#FEECD6] text-sm font-bold hover:bg-[#085953] transition-colors cursor-pointer"
-                    >
-                      <Play size={16} fill="currentColor" />
-                      <span>{isMyCourt ? 'Resume Scoreboard' : 'Spectate Scoreboard'}</span>
-                    </button>
-                  </div>
-                ) : (
-                  /* VIEW B: Pre-Match Lobby & Roster Slots */
-                  <div className="flex flex-col gap-4">
-                    {/* 4 Player Slots Grid */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      {/* Team A Slots */}
-                      <div className="flex flex-col gap-2 p-3 rounded-2xl bg-[#FAF9F5] border border-[#E2E5DC]">
-                        <span className="text-xs font-bold text-[#084B46] uppercase tracking-wider">
-                          Team A Slots
-                        </span>
-                        {[0, 1].map((sIdx) => {
-                          const slot = team0Slots[sIdx];
-                          const hasPlayer = Boolean(slot?.name?.trim());
-                          const isAdding =
-                            activeWalkup?.courtNumber === courtNum &&
-                            activeWalkup?.team === 0 &&
-                            activeWalkup?.slotIndex === sIdx;
-
-                          return (
-                            <div
-                              key={`t0-${sIdx}`}
-                              className="flex items-center justify-between gap-1.5 p-2 rounded-xl bg-white border border-[#E2E5DC] text-xs min-h-[38px]"
-                            >
-                              {hasPlayer ? (
-                                <>
-                                  <span className="font-semibold text-[#084B46] truncate">
-                                    {slot.name}
-                                  </span>
-                                  {isMyCourt && (
-                                    <button
-                                      type="button"
-                                      onClick={() =>
-                                        handleSetWalkupSlot(courtNum, 0, sIdx, '')
-                                      }
-                                      className="text-[#748079] hover:text-[#BA1A1A] p-1 bg-transparent border-0 cursor-pointer"
-                                      title="Remove player"
-                                    >
-                                      <X size={14} />
-                                    </button>
-                                  )}
-                                </>
-                              ) : isAdding ? (
-                                <div className="flex items-center gap-1 w-full">
-                                  <input
-                                    type="text"
-                                    autoFocus
-                                    placeholder="Walk-up name"
-                                    value={walkupName}
-                                    onChange={(e) => setWalkupName(e.target.value)}
-                                    onKeyDown={(e) => {
-                                      if (e.key === 'Enter') {
-                                        handleSetWalkupSlot(courtNum, 0, sIdx, walkupName);
-                                      } else if (e.key === 'Escape') {
-                                        setActiveWalkup(null);
-                                      }
-                                    }}
-                                    className="h-7 flex-1 min-w-0 rounded bg-[#FAF9F5] border border-[#E2E5DC] px-2 text-xs text-[#084B46] outline-none"
-                                  />
-                                  <button
-                                    type="button"
-                                    onClick={() =>
-                                      handleSetWalkupSlot(courtNum, 0, sIdx, walkupName)
-                                    }
-                                    className="h-7 px-2 rounded bg-[#0F5C62] text-[11px] font-bold text-white border-0 cursor-pointer"
-                                  >
-                                    Add
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => setActiveWalkup(null)}
-                                    className="h-7 px-1.5 text-xs text-[#748079] bg-transparent border-0 cursor-pointer"
-                                  >
-                                    <X size={13} />
-                                  </button>
-                                </div>
-                              ) : (
-                                <>
-                                  <span className="text-[#748079] italic">
-                                    Slot {sIdx + 1}: Open
-                                  </span>
-                                  {isMyCourt && (
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        setActiveWalkup({ courtNumber: courtNum, team: 0, slotIndex: sIdx });
-                                        setWalkupName('');
-                                      }}
-                                      className="text-[#0F5C62] hover:underline font-bold text-[11px] bg-transparent border-0 cursor-pointer flex items-center gap-0.5"
-                                    >
-                                      <Plus size={12} />
-                                      <span>Walk-up</span>
-                                    </button>
-                                  )}
-                                </>
-                              )}
-                            </div>
-                          );
-                        })}
-                      </div>
-
-                      {/* Team B Slots */}
-                      <div className="flex flex-col gap-2 p-3 rounded-2xl bg-[#FAF9F5] border border-[#E2E5DC]">
-                        <span className="text-xs font-bold text-[#084B46] uppercase tracking-wider">
-                          Team B Slots
-                        </span>
-                        {[0, 1].map((sIdx) => {
-                          const slot = team1Slots[sIdx];
-                          const hasPlayer = Boolean(slot?.name?.trim());
-                          const isAdding =
-                            activeWalkup?.courtNumber === courtNum &&
-                            activeWalkup?.team === 1 &&
-                            activeWalkup?.slotIndex === sIdx;
-
-                          return (
-                            <div
-                              key={`t1-${sIdx}`}
-                              className="flex items-center justify-between gap-1.5 p-2 rounded-xl bg-white border border-[#E2E5DC] text-xs min-h-[38px]"
-                            >
-                              {hasPlayer ? (
-                                <>
-                                  <span className="font-semibold text-[#084B46] truncate">
-                                    {slot.name}
-                                  </span>
-                                  {isMyCourt && (
-                                    <button
-                                      type="button"
-                                      onClick={() =>
-                                        handleSetWalkupSlot(courtNum, 1, sIdx, '')
-                                      }
-                                      className="text-[#748079] hover:text-[#BA1A1A] p-1 bg-transparent border-0 cursor-pointer"
-                                      title="Remove player"
-                                    >
-                                      <X size={14} />
-                                    </button>
-                                  )}
-                                </>
-                              ) : isAdding ? (
-                                <div className="flex items-center gap-1 w-full">
-                                  <input
-                                    type="text"
-                                    autoFocus
-                                    placeholder="Walk-up name"
-                                    value={walkupName}
-                                    onChange={(e) => setWalkupName(e.target.value)}
-                                    onKeyDown={(e) => {
-                                      if (e.key === 'Enter') {
-                                        handleSetWalkupSlot(courtNum, 1, sIdx, walkupName);
-                                      } else if (e.key === 'Escape') {
-                                        setActiveWalkup(null);
-                                      }
-                                    }}
-                                    className="h-7 flex-1 min-w-0 rounded bg-[#FAF9F5] border border-[#E2E5DC] px-2 text-xs text-[#084B46] outline-none"
-                                  />
-                                  <button
-                                    type="button"
-                                    onClick={() =>
-                                      handleSetWalkupSlot(courtNum, 1, sIdx, walkupName)
-                                    }
-                                    className="h-7 px-2 rounded bg-[#0F5C62] text-[11px] font-bold text-white border-0 cursor-pointer"
-                                  >
-                                    Add
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => setActiveWalkup(null)}
-                                    className="h-7 px-1.5 text-xs text-[#748079] bg-transparent border-0 cursor-pointer"
-                                  >
-                                    <X size={13} />
-                                  </button>
-                                </div>
-                              ) : (
-                                <>
-                                  <span className="text-[#748079] italic">
-                                    Slot {sIdx + 1}: Open
-                                  </span>
-                                  {isMyCourt && (
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        setActiveWalkup({ courtNumber: courtNum, team: 1, slotIndex: sIdx });
-                                        setWalkupName('');
-                                      }}
-                                      className="text-[#0F5C62] hover:underline font-bold text-[11px] bg-transparent border-0 cursor-pointer flex items-center gap-0.5"
-                                    >
-                                      <Plus size={12} />
-                                      <span>Walk-up</span>
-                                    </button>
-                                  )}
-                                </>
-                              )}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-
-                    {/* Controls only shown to the assigned umpire on this court */}
-                    {isMyCourt ? (
-                      <div className="flex flex-col gap-3 pt-2 border-t border-[#E2E5DC]">
-                        {/* Server selection */}
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs font-bold text-[#084B46]">
-                            First Serving Team
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => handleRandomizeServer(courtNum)}
-                            className="flex items-center gap-1 text-[11px] font-semibold text-[#0F5C62] bg-[#EAF0E5] px-2 py-0.5 rounded-full border border-[#E2E5DC] cursor-pointer"
-                          >
-                            <Shuffle size={11} />
-                            <span>Randomize</span>
-                          </button>
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-2">
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setFirstServerMap((prev) => ({ ...prev, [courtNum]: 0 }))
-                            }
-                            className={`h-9 rounded-xl text-xs font-bold transition-colors border cursor-pointer ${
-                              firstServerMap[courtNum] === 0
-                                ? 'bg-[#0F5C62] border-[#0F5C62] text-[#FEECD6]'
-                                : 'bg-[#FAF9F5] border-[#E2E5DC] text-[#203F39]'
-                            }`}
-                          >
-                            Team A
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setFirstServerMap((prev) => ({ ...prev, [courtNum]: 1 }))
-                            }
-                            className={`h-9 rounded-xl text-xs font-bold transition-colors border cursor-pointer ${
-                              firstServerMap[courtNum] === 1
-                                ? 'bg-[#0F5C62] border-[#0F5C62] text-[#FEECD6]'
-                                : 'bg-[#FAF9F5] border-[#E2E5DC] text-[#203F39]'
-                            }`}
-                          >
-                            Team B
-                          </button>
-                        </div>
-
-                        {/* Start Match CTA */}
-                        <button
-                          type="button"
-                          disabled={!isFull || isSubmitting}
-                          onClick={() => handleStartMatch(courtNum)}
-                          className="h-12 w-full flex items-center justify-center gap-2 rounded-full bg-[#0F5C62] text-[#FEECD6] text-sm font-bold hover:bg-[#085953] transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed border-0 shadow-sm"
-                        >
-                          {isSubmitting ? (
-                            <>
-                              <Loader2 size={16} className="animate-spin" />
-                              <span>Starting Match...</span>
-                            </>
-                          ) : isFull ? (
-                            <>
-                              <Play size={16} fill="currentColor" />
-                              <span>Start Match (30:00)</span>
-                            </>
-                          ) : (
-                            <span>Waiting for 4 Players ({filledCount}/4)</span>
-                          )}
-                        </button>
-                      </div>
-                    ) : (
-                      <div className="text-center p-3 rounded-xl bg-[#FAF9F5] border border-dashed border-[#E2E5DC] text-xs text-[#748079]">
-                        {hasOtherUmpire
-                          ? 'Umpire assigned. Waiting for full roster to start match.'
-                          : 'Join as umpire to manage roster and start match.'}
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            );
-          })}
+                  </button>
+                );
+              })}
+            </div>
+          </aside>
         </div>
       </main>
+
+      {/* "Choose your court" Focused Modal Prompt */}
+      {isCourtPickerOpen && !isLoadingCourts && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#084B46]/32 backdrop-blur-[4px]"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="choose-court-title"
+        >
+          <div className="w-full max-w-[440px] rounded-[28px] border-[1.5px] border-[#E2E5DC] bg-[#FEFEFB] p-7 shadow-[0_28px_60px_-12px_rgba(8,75,70,0.28)] flex flex-col gap-5">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h2
+                  id="choose-court-title"
+                  className="text-2xl font-extrabold text-[#084B46] tracking-[-0.02em] m-0"
+                >
+                  Choose your court
+                </h2>
+                <p className="text-sm text-[#748079] mt-1 leading-snug">
+                  Pick an available court to join as umpire and manage the pre-match roster.
+                </p>
+              </div>
+              {activeCourtNum && (
+                <button
+                  type="button"
+                  onClick={() => setIsCourtPickerOpen(false)}
+                  className="flex h-8 w-8 items-center justify-center rounded-full border border-[#E2E5DC] bg-[#FAF9F5] text-[#748079] hover:text-[#084B46] cursor-pointer shrink-0"
+                  aria-label="Close court picker"
+                >
+                  <X size={16} />
+                </button>
+              )}
+            </div>
+
+            {/* Refined Court Dropdown */}
+            <div ref={dropdownRef} className="flex flex-col gap-2">
+              <button
+                type="button"
+                aria-haspopup="listbox"
+                aria-expanded={dropdownOpen}
+                onClick={() => setDropdownOpen((o) => !o)}
+                className="flex h-[52px] w-full items-center justify-between rounded-2xl border-2 border-[#0F5C62] bg-[#FAF9F5] px-4 text-left transition-colors cursor-pointer"
+              >
+                {pendingDropdownCourt ? (
+                  <>
+                    <span className="flex items-center gap-2.5 text-base font-extrabold text-[#084B46]">
+                      <span className="size-2.5 rounded-full bg-[#0F5C62]" />
+                      <span>Court {pendingDropdownCourt}</span>
+                    </span>
+                    <span className="flex items-center gap-2.5 text-[13px] font-bold text-[#0F5C62]">
+                      <span>Available</span>
+                      <ChevronDown
+                        size={16}
+                        className={`text-[#0F5C62] transition-transform ${
+                          dropdownOpen ? 'rotate-180' : ''
+                        }`}
+                      />
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <span className="text-sm font-semibold text-[#748079]">
+                      Select an available court...
+                    </span>
+                    <ChevronDown
+                      size={16}
+                      className={`text-[#0F5C62] transition-transform ${
+                        dropdownOpen ? 'rotate-180' : ''
+                      }`}
+                    />
+                  </>
+                )}
+              </button>
+
+              {dropdownOpen && (
+                <ul
+                  role="listbox"
+                  aria-label="Courts"
+                  className="w-full rounded-[18px] border-[1.5px] border-[#E2E5DC] bg-[#FEFEFB] p-1.5 shadow-[0_12px_28px_-6px_rgba(8,75,70,0.14)] flex flex-col gap-1 m-0 list-none"
+                >
+                  {[1, 2, 3, 4].map((cNum) => {
+                    const status = getCourtStatus(cNum);
+                    const isAvailable = status === 'available';
+                    const isActiveMatch = status === 'active';
+                    const session = courtsData[cNum];
+                    const umpireName = session?.player_names?.umpireName;
+                    const isSelected = pendingDropdownCourt === cNum;
+
+                    return (
+                      <li key={`dropdown-court-${cNum}`}>
+                        <button
+                          type="button"
+                          role="option"
+                          aria-selected={isSelected}
+                          disabled={!isAvailable}
+                          onClick={() => {
+                            if (!isAvailable) return;
+                            setPendingDropdownCourt(cNum);
+                          }}
+                          className={`flex h-[46px] w-full items-center justify-between rounded-xl px-3.5 text-left text-sm font-bold transition-colors border-0 ${
+                            isAvailable
+                              ? isSelected
+                                ? 'bg-[#0F5C62] text-[#FEECD6] cursor-pointer'
+                                : 'bg-transparent text-[#084B46] hover:bg-[#EAF0E5] cursor-pointer'
+                              : isActiveMatch
+                              ? 'bg-[#FFF7ED] text-[#9A3412] cursor-not-allowed'
+                              : 'bg-[#F4F5F2] text-[#748079] opacity-65 cursor-not-allowed'
+                          }`}
+                        >
+                          <span className="flex items-center gap-2.5">
+                            <span
+                              className={`size-2 rounded-full shrink-0 ${
+                                isAvailable
+                                  ? isSelected
+                                    ? 'bg-[#FEECD6]'
+                                    : 'bg-[#0F5C62]'
+                                  : isActiveMatch
+                                  ? 'bg-[#EA580C]'
+                                  : 'bg-[#748079]'
+                              }`}
+                            />
+                            <span>Court {cNum}</span>
+                          </span>
+
+                          {isAvailable ? (
+                            <span
+                              className={`text-xs font-bold ${
+                                isSelected ? 'text-[#FEECD6]' : 'text-[#0F5C62]'
+                              }`}
+                            >
+                              Available
+                            </span>
+                          ) : isActiveMatch ? (
+                            <span className="text-xs font-extrabold text-[#EA580C]">
+                              Active Match · {session?.score_team0 ?? 0}–{session?.score_team1 ?? 0}
+                            </span>
+                          ) : (
+                            <span className="text-xs font-bold text-[#748079]">
+                              Occupied{umpireName ? ` · ${umpireName}` : ''}
+                            </span>
+                          )}
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </div>
+
+            <button
+              type="button"
+              disabled={
+                isSubmitting ||
+                !pendingDropdownCourt ||
+                getCourtStatus(pendingDropdownCourt) !== 'available'
+              }
+              onClick={async () => {
+                if (!pendingDropdownCourt) return;
+                const targetCourt = pendingDropdownCourt;
+                setSelectedCourt(targetCourt);
+                setIsCourtPickerOpen(false);
+                await handleJoinCourt(targetCourt);
+              }}
+              className="h-[52px] w-full rounded-2xl bg-[#0F5C62] text-[#FEECD6] text-base font-extrabold hover:bg-[#085953] transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed border-0 shadow-[0_6px_16px_-4px_rgba(15,92,98,0.35)] flex items-center justify-center gap-2"
+            >
+              {isSubmitting ? (
+                <>
+                  <Loader2 size={18} className="animate-spin" />
+                  <span>Joining Court {pendingDropdownCourt}...</span>
+                </>
+              ) : pendingDropdownCourt ? (
+                <span>Join Court {pendingDropdownCourt} as Umpire</span>
+              ) : (
+                <span>No Available Courts</span>
+              )}
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* QR Modal for court */}
       {activeQrModalSession && (

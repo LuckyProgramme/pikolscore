@@ -257,41 +257,40 @@ export function CourtQrLobbyModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-deep-green/75 backdrop-blur-sm overflow-y-auto"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#084B46]/35 backdrop-blur-[4px] overflow-y-auto"
       role="dialog"
       aria-modal="true"
       aria-labelledby="lobby-modal-title"
     >
-      <div className="relative w-full max-w-2xl bg-ivory rounded-[28px] sm:rounded-[36px] border border-line shadow-2xl p-5 sm:p-8 my-auto animate-in fade-in zoom-in-95 duration-200 text-dark-teal">
+      <div
+        className={`relative w-full ${
+          isUmpire ? 'max-w-[420px] p-6 sm:p-7' : 'max-w-2xl p-5 sm:p-8'
+        } bg-[#FEFEFB] rounded-[28px] border-[1.5px] border-[#E2E5DC] shadow-[0_28px_60px_-12px_rgba(8,75,70,0.28)] my-auto animate-in fade-in zoom-in-95 duration-200 text-[#084B46]`}
+      >
         {/* Top Header */}
-        <div className="flex items-start justify-between gap-3 pb-4 mb-5 border-b border-line">
+        <div className="flex items-start justify-between gap-3 pb-4 mb-5 border-b border-[#E2E5DC]">
           <div className="flex items-center gap-3">
-            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-pale-sage text-teal border border-teal/20">
-              <QrCode size={24} aria-hidden="true" />
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-[#EAF0E5] text-[#0F5C62] border border-[#0F5C62]/20">
+              <QrCode size={22} aria-hidden="true" />
             </div>
             <div>
-              <div className="flex items-center gap-2 flex-wrap">
-                {courtNumber && (
-                  <span className="rounded-full bg-teal px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wider text-cream">
-                    Court {courtNumber}
-                  </span>
-                )}
-                <span className="rounded-full bg-teal/10 px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wider text-teal border border-teal/20">
-                  {format === 'singles' ? 'Singles (1 vs 1)' : 'Doubles (2 vs 2)'}
-                </span>
-                <span className="text-[12px] font-semibold text-muted">
-                  {assignedUmpireId
-                    ? `Supervised by ${playerNames.umpireName || 'Official Umpire'}`
-                    : 'Awaiting Umpire'}
-                </span>
-              </div>
-              <h1 id="lobby-modal-title" className="text-[22px] sm:text-[24px] font-bold text-dark-teal m-0 mt-0.5">
+              <h1
+                id="lobby-modal-title"
+                className="text-xl sm:text-[22px] font-extrabold text-[#084B46] m-0 leading-tight"
+              >
                 {isUmpire
                   ? courtNumber
-                    ? `Court ${courtNumber} QR & Roster Lobby`
-                    : 'Court QR & Roster Lobby'
+                    ? `Court ${courtNumber} QR Code`
+                    : 'Court QR Code'
                   : 'Courtside Match Lobby'}
               </h1>
+              <p className="text-xs text-[#748079] m-0 mt-0.5">
+                {isUmpire
+                  ? 'Players scan to claim their team slot'
+                  : assignedUmpireId
+                  ? `Supervised by ${playerNames.umpireName || 'Official Umpire'}`
+                  : 'Awaiting Umpire'}
+              </p>
             </div>
           </div>
 
@@ -300,10 +299,10 @@ export function CourtQrLobbyModal({
             <button
               type="button"
               onClick={onClose}
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-off-white border border-line text-muted hover:text-dark-teal hover:bg-pale-sage transition-colors cursor-pointer"
-              aria-label="Close lobby modal"
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#FAF9F5] border border-[#E2E5DC] text-[#748079] hover:text-[#084B46] hover:bg-[#EAF0E5] transition-colors cursor-pointer"
+              aria-label="Close QR modal"
             >
-              <X size={18} aria-hidden="true" />
+              <X size={16} aria-hidden="true" />
             </button>
           )}
         </div>
@@ -319,367 +318,50 @@ export function CourtQrLobbyModal({
           </div>
         )}
 
-        {/* UMPIRE VIEW: QR Code Share + Live Roster Slot Manager */}
+        {/* UMPIRE VIEW: Focused Large QR Card */}
         {isUmpire ? (
-          <div className="flex flex-col gap-6">
-            {/* Top row: QR code + link copy */}
-            <div className="grid grid-cols-1 sm:grid-cols-[160px_1fr] gap-5 items-center p-4 rounded-2xl bg-off-white border border-line">
-              <div className="flex items-center justify-center bg-white p-2.5 rounded-xl border border-line shadow-sm">
+          <div className="flex flex-col items-center gap-4">
+            {/* Large Scannable QR Code */}
+            <div className="w-full flex flex-col items-center justify-center p-5 rounded-2xl bg-[#FAF9F5] border border-[#E2E5DC] gap-3">
+              <div className="flex items-center justify-center bg-white p-3.5 rounded-2xl border border-[#E2E5DC] shadow-xs">
                 {qrSvg ? (
                   <div
-                    className="w-32 h-32 flex items-center justify-center [&>svg]:w-full [&>svg]:h-full"
+                    className="w-52 h-52 sm:w-56 sm:h-56 flex items-center justify-center [&>svg]:w-full [&>svg]:h-full"
                     dangerouslySetInnerHTML={{ __html: qrSvg }}
                   />
                 ) : (
-                  <div className="w-32 h-32 flex items-center justify-center text-muted">
-                    <Loader2 size={24} className="animate-spin text-teal" />
+                  <div className="w-52 h-52 sm:w-56 sm:h-56 flex items-center justify-center text-[#748079]">
+                    <Loader2 size={28} className="animate-spin text-[#0F5C62]" />
                   </div>
                 )}
               </div>
 
-              <div className="flex flex-col gap-2 min-w-0">
-                <span className="text-[12px] font-bold uppercase tracking-wider text-teal">
-                  Scan to Join {courtNumber ? `Court ${courtNumber}` : 'Court'}
+              {/* Live Player Count Pill */}
+              <span className="inline-flex items-center gap-2 rounded-full bg-[#EAF0E5] border border-[#0F5C62]/20 px-3.5 py-1 text-xs font-extrabold text-[#0F5C62]">
+                <span className="size-2 rounded-full bg-[#0F5C62]" />
+                <span>
+                  {slotCount.filled}/{slotCount.total} Players Joined
                 </span>
-                <p className="text-[13px] text-muted m-0 leading-normal">
-                  Players can scan this fixed court QR code with their phone camera to join their team slot.
-                </p>
-
-                <div className="flex items-center gap-2 mt-1">
-                  <input
-                    type="text"
-                    readOnly
-                    value={joinUrl}
-                    className="h-9 flex-1 min-w-0 rounded-lg bg-white border border-line px-3 text-[12px] text-dark-teal font-mono outline-none"
-                  />
-                  <button
-                    type="button"
-                    onClick={handleCopy}
-                    className="flex h-9 shrink-0 items-center gap-1.5 rounded-lg bg-teal px-3 text-[12px] font-semibold text-cream hover:bg-forest-teal transition-colors cursor-pointer border-0"
-                  >
-                    {copied ? <Check size={14} /> : <Copy size={14} />}
-                    <span>{copied ? 'Copied' : 'Copy'}</span>
-                  </button>
-                </div>
-              </div>
+              </span>
             </div>
 
-            {/* Roster Slots Grid */}
-            <div className="flex flex-col gap-3">
-              <div className="flex items-center justify-between">
-                <span className="text-[13px] font-bold uppercase tracking-wider text-dark-teal">
-                  Court Roster Slots ({slotCount.filled}/{slotCount.total} Filled)
-                </span>
-                <span className="text-[12px] text-muted">
-                  All {slotCount.total} slots required before starting
-                </span>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {/* Side 0 */}
-                <div className="flex flex-col gap-2 p-3.5 rounded-2xl bg-pale-sage/60 border border-line">
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-[14px] font-bold text-dark-teal">
-                      {teamNames[0]}
-                    </span>
-                    <span className="text-[11px] font-semibold text-teal">
-                      {format === 'singles' ? 'Player 1' : 'Team A'}
-                    </span>
-                  </div>
-
-                  {slots.team0.map((slot, idx) => {
-                    const slotKey = `0-${idx}`;
-                    const isInputOpen = activeWalkupSlot === slotKey;
-                    const hasPlayer = Boolean(slot?.name?.trim());
-
-                    return (
-                      <div
-                        key={slotKey}
-                        className="flex items-center justify-between gap-2 p-2.5 rounded-xl bg-ivory border border-line min-h-[44px]"
-                      >
-                        {hasPlayer ? (
-                          <>
-                            <span className="text-[14px] font-semibold text-dark-teal truncate">
-                              {slot.name}
-                            </span>
-                            {allowRosterEdit && (
-                              <button
-                                type="button"
-                                onClick={() => handleUmpireSetSlot(0, idx, '')}
-                                aria-label={`Vacate slot ${slot.name}`}
-                                title="Clear player slot"
-                                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-muted hover:text-error hover:bg-line/40 transition-colors border-0 bg-transparent cursor-pointer"
-                              >
-                                <X size={15} />
-                              </button>
-                            )}
-                          </>
-                        ) : isInputOpen && allowRosterEdit ? (
-                          <div className="flex items-center gap-1.5 w-full">
-                            <input
-                              type="text"
-                              autoFocus
-                              placeholder="Walk-up player name"
-                              value={walkupInputs[slotKey] || ''}
-                              onChange={(e) =>
-                                setWalkupInputs((prev) => ({
-                                  ...prev,
-                                  [slotKey]: e.target.value,
-                                }))
-                              }
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter') {
-                                  e.preventDefault();
-                                  handleUmpireSetSlot(0, idx, walkupInputs[slotKey] || '');
-                                } else if (e.key === 'Escape') {
-                                  setActiveWalkupSlot(null);
-                                }
-                              }}
-                              className="h-8 flex-1 min-w-0 rounded-lg bg-off-white border border-line px-2 text-[13px] text-dark-teal outline-none focus:border-teal"
-                            />
-                            <button
-                              type="button"
-                              onClick={() =>
-                                handleUmpireSetSlot(0, idx, walkupInputs[slotKey] || '')
-                              }
-                              className="h-8 px-2.5 rounded-lg bg-teal text-[12px] font-bold text-cream border-0 cursor-pointer"
-                            >
-                              Add
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setActiveWalkupSlot(null)}
-                              className="h-8 px-2 rounded-lg bg-transparent text-[12px] text-muted border-0 cursor-pointer"
-                            >
-                              Cancel
-                            </button>
-                          </div>
-                        ) : (
-                          <>
-                            <span className="text-[13px] text-muted italic">
-                              Open Slot (Awaiting Scan)
-                            </span>
-                            {allowRosterEdit && (
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setActiveWalkupSlot(slotKey);
-                                  setWalkupInputs((prev) => ({ ...prev, [slotKey]: '' }));
-                                }}
-                                className="flex items-center gap-1 text-[11px] font-bold text-teal hover:underline bg-transparent border-0 cursor-pointer"
-                              >
-                                <Plus size={13} />
-                                <span>Add Walk-up</span>
-                              </button>
-                            )}
-                          </>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-
-                {/* Side 1 */}
-                <div className="flex flex-col gap-2 p-3.5 rounded-2xl bg-pale-sage/60 border border-line">
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-[14px] font-bold text-dark-teal">
-                      {teamNames[1]}
-                    </span>
-                    <span className="text-[11px] font-semibold text-teal">
-                      {format === 'singles' ? 'Player 2' : 'Team B'}
-                    </span>
-                  </div>
-
-                  {slots.team1.map((slot, idx) => {
-                    const slotKey = `1-${idx}`;
-                    const isInputOpen = activeWalkupSlot === slotKey;
-                    const hasPlayer = Boolean(slot?.name?.trim());
-
-                    return (
-                      <div
-                        key={slotKey}
-                        className="flex items-center justify-between gap-2 p-2.5 rounded-xl bg-ivory border border-line min-h-[44px]"
-                      >
-                        {hasPlayer ? (
-                          <>
-                            <span className="text-[14px] font-semibold text-dark-teal truncate">
-                              {slot.name}
-                            </span>
-                            {allowRosterEdit && (
-                              <button
-                                type="button"
-                                onClick={() => handleUmpireSetSlot(1, idx, '')}
-                                aria-label={`Vacate slot ${slot.name}`}
-                                title="Clear player slot"
-                                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-muted hover:text-error hover:bg-line/40 transition-colors border-0 bg-transparent cursor-pointer"
-                              >
-                                <X size={15} />
-                              </button>
-                            )}
-                          </>
-                        ) : isInputOpen && allowRosterEdit ? (
-                          <div className="flex items-center gap-1.5 w-full">
-                            <input
-                              type="text"
-                              autoFocus
-                              placeholder="Walk-up player name"
-                              value={walkupInputs[slotKey] || ''}
-                              onChange={(e) =>
-                                setWalkupInputs((prev) => ({
-                                  ...prev,
-                                  [slotKey]: e.target.value,
-                                }))
-                              }
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter') {
-                                  e.preventDefault();
-                                  handleUmpireSetSlot(1, idx, walkupInputs[slotKey] || '');
-                                } else if (e.key === 'Escape') {
-                                  setActiveWalkupSlot(null);
-                                }
-                              }}
-                              className="h-8 flex-1 min-w-0 rounded-lg bg-off-white border border-line px-2 text-[13px] text-dark-teal outline-none focus:border-teal"
-                            />
-                            <button
-                              type="button"
-                              onClick={() =>
-                                handleUmpireSetSlot(1, idx, walkupInputs[slotKey] || '')
-                              }
-                              className="h-8 px-2.5 rounded-lg bg-teal text-[12px] font-bold text-cream border-0 cursor-pointer"
-                            >
-                              Add
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setActiveWalkupSlot(null)}
-                              className="h-8 px-2 rounded-lg bg-transparent text-[12px] text-muted border-0 cursor-pointer"
-                            >
-                              Cancel
-                            </button>
-                          </div>
-                        ) : (
-                          <>
-                            <span className="text-[13px] text-muted italic">
-                              Open Slot (Awaiting Scan)
-                            </span>
-                            {allowRosterEdit && (
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setActiveWalkupSlot(slotKey);
-                                  setWalkupInputs((prev) => ({ ...prev, [slotKey]: '' }));
-                                }}
-                                className="flex items-center gap-1 text-[11px] font-bold text-teal hover:underline bg-transparent border-0 cursor-pointer"
-                              >
-                                <Plus size={13} />
-                                <span>Add Walk-up</span>
-                              </button>
-                            )}
-                          </>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
+            {/* Copyable Link Row */}
+            <div className="w-full flex items-center gap-2">
+              <input
+                type="text"
+                readOnly
+                value={joinUrl}
+                className="h-10 flex-1 min-w-0 rounded-xl bg-[#FAF9F5] border border-[#E2E5DC] px-3 text-xs text-[#084B46] font-mono outline-none"
+              />
+              <button
+                type="button"
+                onClick={handleCopy}
+                className="flex h-10 shrink-0 items-center gap-1.5 rounded-xl bg-[#0F5C62] px-3.5 text-xs font-bold text-[#FEECD6] hover:bg-[#085953] transition-colors cursor-pointer border-0"
+              >
+                {copied ? <Check size={14} /> : <Copy size={14} />}
+                <span>{copied ? 'Copied' : 'Copy'}</span>
+              </button>
             </div>
-
-            {allowRosterEdit ? (
-              <>
-                {/* First Server Selector */}
-                <div className="flex flex-col gap-2 pt-2 border-t border-line">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[12px] font-bold uppercase tracking-wider text-dark-teal">
-                      First Serving Team
-                    </span>
-                    <button
-                      type="button"
-                      onClick={handleRandomizeServer}
-                      className="flex items-center gap-1.5 text-[11px] font-semibold text-teal hover:text-forest-teal bg-pale-sage px-2.5 py-1 rounded-full border border-line transition-colors cursor-pointer"
-                    >
-                      <Shuffle size={12} aria-hidden="true" />
-                      <span>Randomize</span>
-                    </button>
-                  </div>
-
-                  {randomNotice && (
-                    <div className="text-[12px] font-semibold text-teal">
-                      {randomNotice}
-                    </div>
-                  )}
-
-                  <div className="grid grid-cols-2 gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setFirstServer(0)}
-                      className={`h-10 flex items-center justify-center gap-2 rounded-xl text-[13px] font-bold transition-colors border-[1.5px] cursor-pointer ${
-                        firstServer === 0
-                          ? 'bg-teal border-teal text-cream'
-                          : 'bg-off-white border-line text-dark-teal hover:bg-pale-sage'
-                      }`}
-                    >
-                      {firstServer === 0 && <Check size={14} />}
-                      <span className="truncate">{teamNames[0]}</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => setFirstServer(1)}
-                      className={`h-10 flex items-center justify-center gap-2 rounded-xl text-[13px] font-bold transition-colors border-[1.5px] cursor-pointer ${
-                        firstServer === 1
-                          ? 'bg-teal border-teal text-cream'
-                          : 'bg-off-white border-line text-dark-teal hover:bg-pale-sage'
-                      }`}
-                    >
-                      {firstServer === 1 && <Check size={14} />}
-                      <span className="truncate">{teamNames[1]}</span>
-                    </button>
-                  </div>
-                </div>
-
-                {/* Start Match CTA */}
-                <button
-                  type="button"
-                  disabled={!slotCount.isFull || isSubmitting}
-                  onClick={handleStartMatch}
-                  className="mt-2 h-13 w-full flex items-center justify-center gap-2.5 rounded-full bg-teal hover:bg-forest-teal text-cream text-[16px] font-bold shadow-[0_10px_24px_-10px_rgba(15,92,98,0.5)] transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal"
-                >
-                  {isSubmitting ? (
-                    <>
-                      <Loader2 size={18} className="animate-spin" />
-                      <span>Starting Match...</span>
-                    </>
-                  ) : slotCount.isFull ? (
-                    <>
-                      <Play size={18} fill="currentColor" />
-                      <span>Start Match (30:00)</span>
-                    </>
-                  ) : (
-                    <span>
-                      Waiting for Players ({slotCount.filled}/{slotCount.total} Claimed)
-                    </span>
-                  )}
-                </button>
-              </>
-            ) : (
-              <div className="pt-2 border-t border-line flex flex-col sm:flex-row items-center justify-between gap-3">
-                <span className="text-[13px] text-muted">
-                  {assignedUmpireId
-                    ? `Officiated by ${playerNames.umpireName || 'another umpire'}.`
-                    : 'Join this court as its official umpire to manage slots and start the match.'}
-                </span>
-                {!assignedUmpireId && onJoinCourt && (
-                  <button
-                    type="button"
-                    onClick={onJoinCourt}
-                    disabled={isSubmitting}
-                    className="h-10 px-5 rounded-full bg-teal hover:bg-forest-teal text-cream text-[13px] font-bold transition-colors cursor-pointer border-0 shrink-0"
-                  >
-                    Join Court {courtNumber || ''} as Umpire
-                  </button>
-                )}
-              </div>
-            )}
           </div>
         ) : (
           /* PLAYER VIEW: Pre-Match Lobby Slot Picker */
