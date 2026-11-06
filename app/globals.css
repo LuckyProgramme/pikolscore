@@ -93,7 +93,9 @@ body {
 
 /* SCOREBOARD SHELL */
 .ps-shell {
-  min-height: 100dvh;
+  height: 100dvh;
+  max-height: 100dvh;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
   background-color: var(--ps-canvas);
@@ -109,20 +111,56 @@ body {
   justify-content: space-between;
   gap: 12px;
   height: 72px;
+  flex: none;
   padding: 0 24px;
   border-bottom: 1px solid var(--ps-border);
   background-color: var(--ps-ivory);
 }
 
+.ps-scoreboard-header {
+  height: 80px;
+  padding: 0 28px;
+  background-color: #FEFEFB;
+  border-bottom: 1px solid #E2E5DC;
+}
+
 .ps-logo {
   display: flex;
   align-items: center;
-  gap: 14px;
-  font-weight: 800;
-  font-size: 26px;
-  letter-spacing: 0.02em;
+  gap: 12px;
+  font-weight: 700;
+  font-size: 22px;
+  letter-spacing: 0.025em;
   color: var(--ps-dark-teal);
   user-select: none;
+}
+
+.ps-logo-mark {
+  width: 34px;
+  height: 34px;
+  flex: none;
+}
+
+.ps-header-right {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.ps-header-sync {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #203F39;
+  user-select: none;
+}
+
+.ps-sync-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 9999px;
 }
 
 .ps-header-actions {
@@ -146,6 +184,17 @@ body {
   font-size: 15px;
   font-weight: 600;
   max-width: 220px;
+}
+
+.ps-user-pill {
+  height: 42px;
+  padding: 0 18px;
+  border-radius: 9999px;
+  background-color: #EAF0E5;
+  border: 1.5px solid #E2E5DC;
+  color: #084B46;
+  font-size: 14px;
+  font-weight: 700;
 }
 
 .ps-profile-badge span {
@@ -192,36 +241,69 @@ body {
   background-color: var(--ps-card);
 }
 
-/* MAIN CONTENT */
+/* MAIN CONTENT & STAGE (Desktop 1440x900 baseline: space/m = 28, radius/stage = 40, radius/card = 32) */
 .ps-main {
   flex: 1;
   min-height: 0;
   width: 100%;
-  max-width: 1180px;
   margin: 0 auto;
   display: flex;
   flex-direction: column;
-  justify-content: center;
   align-items: stretch;
-  gap: clamp(12px, 2vh, 24px);
-  padding: clamp(10px, 1.8vh, 24px) clamp(16px, 4vw, 48px);
+  padding: 28px;
+}
+
+.ps-stage {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+  padding: 28px;
+  border-radius: 40px;
+  background-color: #FEFEFB;
+  border: 1.5px solid #E2E5DC;
+}
+
+.ps-court-grid {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 28px;
+}
+
+.ps-control-slot {
+  grid-column: 1 / -1;
+  grid-row: 1;
+  position: relative;
+  width: 100%;
+  flex: none;
+}
+
+.ps-net-line {
+  display: none;
 }
 
 /* 2. UNDO / REDO & TIMER CONTROL BAR */
 .ps-bar {
   display: flex;
   width: 100%;
-  min-height: 76px;
+  height: 99px;
+  min-height: 99px;
   flex: none;
   box-sizing: border-box;
   border-radius: 24px;
-  background-color: var(--ps-ivory);
-  border: 1.5px solid var(--ps-border);
+  background-color: #FEFEFB;
+  border: 1.5px solid #E2E5DC;
   overflow: hidden;
-  box-shadow: 0 4px 12px -2px rgba(8, 75, 70, 0.04);
 }
 
 .ps-bar-btn {
+  flex: 1;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -229,11 +311,12 @@ body {
   border: 0;
   background: transparent;
   font-family: 'Outfit', system-ui, sans-serif;
-  font-weight: 700;
+  font-weight: 600;
   font-size: 18px;
-  padding: 12px 16px;
-  min-height: 76px;
-  color: var(--ps-ink);
+  padding: 8px 16px;
+  height: 100%;
+  min-height: 44px;
+  color: #203F39;
   cursor: pointer;
   user-select: none;
   transition: background-color 0.15s ease, color 0.15s ease, opacity 0.15s ease;
@@ -264,7 +347,7 @@ body {
   height: 22px;
   fill: none;
   stroke: currentColor;
-  stroke-width: 2;
+  stroke-width: 2.2;
   stroke-linecap: round;
   stroke-linejoin: round;
 }
@@ -275,64 +358,60 @@ body {
   align-items: center;
   justify-content: center;
   gap: 2px;
-  background-color: var(--ps-card);
-  border-left: 1.5px solid var(--ps-border);
-  border-right: 1.5px solid var(--ps-border);
+  background-color: #EAF0E5;
+  border-left: 1.5px solid #E2E5DC;
+  border-right: 1.5px solid #E2E5DC;
   padding: 6px 16px;
-  color: var(--ps-dark-teal);
+  color: #084B46;
 }
 
 .ps-tm {
   font-family: 'Outfit', system-ui, sans-serif;
-  font-weight: 800;
-  font-size: clamp(28px, 3.8vw, 42px);
+  font-weight: 700;
+  font-size: 38px;
   line-height: 1;
-  letter-spacing: -0.02em;
-  color: var(--ps-dark-teal);
+  letter-spacing: -0.01em;
+  color: #084B46;
   font-variant-numeric: tabular-nums;
   font-feature-settings: "tnum" 1;
 }
 
 .ps-tl {
   font-family: 'Outfit', system-ui, sans-serif;
-  font-weight: 600;
-  font-size: 16px;
+  font-weight: 400;
+  font-size: 14px;
   margin-top: 2px;
-  color: var(--ps-muted-strong);
+  color: #5F6D66;
 }
 
 /* 3. TWO SCORE PANELS */
-.ps-teams {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: clamp(14px, 2vw, 24px);
-  width: 100%;
-}
-
 .ps-team {
+  grid-row: 2;
+  min-height: 0;
+  height: 100%;
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  gap: clamp(10px, 1.5vh, 16px);
-  padding: clamp(14px, 1.8vh, 20px);
+  gap: 12px;
+  padding: 16px;
   border-radius: 32px;
   cursor: pointer;
   user-select: none;
   text-align: left;
   font-family: 'Outfit', system-ui, sans-serif;
   outline-offset: 3px;
-  transition: background-color 0.4s ease, border-color 0.4s ease, transform 0.1s ease, opacity 0.3s ease;
+  transition: background-color 0.35s ease, border-color 0.35s ease, transform 0.1s ease, opacity 0.3s ease;
 }
 
 .ps-team:disabled {
   cursor: default;
 }
 
-/* Serving panel: pale-sage background, teal header pill with ivory team name and cream SERVING, 2px teal border on the digit well, dark-teal digits */
+/* Serving panel (Desktop / Phone default) */
 .ps-team[data-serving="true"] {
   order: 0;
   background-color: #EAF0E5;
-  border: 1.5px solid transparent;
+  border: 1.5px solid #0F5C62;
   --digit-color: #084B46;
 }
 
@@ -341,57 +420,51 @@ body {
   color: #FEFEFB;
 }
 
-.ps-team[data-serving="true"] .ps-chip .ps-chip-name {
+.ps-team[data-serving="true"] .ps-team-name {
   color: #FEFEFB;
 }
 
-.ps-team[data-serving="true"] .ps-chip .ps-role {
+.ps-team[data-serving="true"] .ps-server-label {
   color: #FEECD6;
-  font-weight: 600;
-  letter-spacing: 0.1em;
-  opacity: 1;
 }
 
 .ps-team[data-serving="true"] .ps-pair {
   border: 2px solid #0F5C62;
-  background-color: transparent;
+  background-color: #EAF0E5;
 }
 
 .ps-team[data-serving="true"] .ps-hint {
   color: #084B46;
 }
 
-/* Receiving panel: ivory background, line-color border, #E2E5DC header pill with high-contrast muted-strong text, accessible receiving digits, warn caption */
+/* Receiving panel (Desktop / Phone default) */
 .ps-team[data-serving="false"] {
   order: 1;
   background-color: #FEFEFB;
   border: 1.5px solid #E2E5DC;
-  --digit-color: #5A6660;
+  --digit-color: #5F6D66;
 }
 
 .ps-team[data-serving="false"] .ps-chip {
   background-color: #E2E5DC;
-  color: #384640;
+  color: #203F39;
 }
 
-.ps-team[data-serving="false"] .ps-chip .ps-chip-name {
-  color: #384640;
+.ps-team[data-serving="false"] .ps-team-name {
+  color: #203F39;
 }
 
-.ps-team[data-serving="false"] .ps-chip .ps-role {
-  color: #384640;
-  font-weight: 600;
-  letter-spacing: 0.1em;
-  opacity: 1;
+.ps-team[data-serving="false"] .ps-server-label {
+  color: #203F39;
 }
 
 .ps-team[data-serving="false"] .ps-pair {
   background-color: #FAF9F5;
-  border: 1.5px solid transparent;
+  border: 0;
 }
 
 .ps-team[data-serving="false"] .ps-hint {
-  color: var(--ps-warn);
+  color: #7A3E12;
 }
 
 .ps-team:not(:disabled):active {
@@ -403,39 +476,100 @@ body {
   outline-offset: 3px;
 }
 
-/* Team Chip (equal 72px height on both cards) */
+/* CardHeader Pill (88px on Desktop, radius/pill = 999) */
 .ps-chip {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  height: 72px;
+  height: 88px;
   width: 100%;
   flex: none;
-  padding: 0 10px 0 22px;
+  padding: 0 12px 0 24px;
   border-radius: 9999px;
-  font-weight: 700;
-  font-size: 18px;
-  letter-spacing: 0.04em;
-  transition: background-color 0.4s ease, color 0.4s ease;
+  transition: background-color 0.35s ease, color 0.35s ease;
 }
 
-.ps-chip-name {
-  display: inline-flex;
-  align-items: baseline;
-  flex-wrap: nowrap;
-  gap: 10px;
+.ps-chip-left {
+  display: flex;
+  align-items: center;
+  gap: 14px;
   min-width: 0;
+  flex: 1;
 }
 
-.ps-role {
+.ps-team-name {
   font-weight: 700;
-  font-size: 12px;
-  letter-spacing: 0.1em;
+  font-size: 22px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  line-height: 1.1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ps-active-player-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 36px;
+  max-width: 180px;
+  padding: 0 14px;
+  border-radius: 9999px;
+  background-color: #FEECD6;
+  color: #084B46;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: none;
+}
+
+.ps-chip-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: none;
+  margin-left: auto;
+}
+
+.ps-server-label {
+  font-weight: 600;
+  font-size: 13px;
+  letter-spacing: 0.11em;
   text-transform: uppercase;
 }
 
-/* Score Well (Pair of FlipDigits) */
+.ps-server-tile {
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  border-radius: 18px;
+  font-weight: 700;
+  font-size: 28px;
+  line-height: 1;
+  transition: all 0.25s ease;
+}
+
+.ps-server-tile[data-active="true"] {
+  background-color: #FEECD6;
+  color: #084B46;
+  border: 0;
+}
+
+.ps-server-tile[data-active="false"] {
+  background-color: transparent;
+  color: #5F6D66;
+  font-size: 22px;
+  font-weight: 600;
+  border: 1.5px dashed #5F6D66;
+}
+
+/* DigitWell (Pair of FlipDigits filling remaining card height) */
 .ps-pair {
   display: flex;
   flex: 1;
@@ -443,20 +577,21 @@ body {
   min-height: 0;
   gap: 12px;
   padding: 12px;
-  border-radius: 24px;
-  transition: border-color 0.4s ease, background-color 0.4s ease;
+  border-radius: 26px;
+  transition: border-color 0.35s ease, background-color 0.35s ease;
 }
 
-/* FlipDigit Tile (viewport-height scaled per R9) */
+/* DigitTile (Fill well, ivory #FEFEFB, 1px middle line at 10% opacity, digit font min(0.8 * tileH, 1.1 * tileW)) */
 .ps-fd {
   position: relative;
   flex: 1;
-  height: clamp(140px, 31vh, 340px);
+  height: 100%;
+  min-height: 0;
   perspective: 600px;
   container-type: size;
   --tile-bg: #FEFEFB;
   border-radius: 22px;
-  box-shadow: 0 4px 12px -2px rgba(8, 75, 70, 0.06), 0 2px 4px -1px rgba(8, 75, 70, 0.03);
+  border: 1px solid #E2E5DC;
 }
 
 .ps-h {
@@ -467,7 +602,7 @@ body {
   overflow: hidden;
   background-color: var(--tile-bg);
   backface-visibility: hidden;
-  transition: background-color 0.4s ease;
+  transition: background-color 0.35s ease;
 }
 
 .ps-h span {
@@ -479,28 +614,28 @@ body {
   align-items: center;
   justify-content: center;
   font-family: 'Outfit', system-ui, sans-serif;
-  font-weight: 800;
-  font-size: min(76cqw, 82cqh);
+  font-weight: 700;
+  font-size: min(80cqh, 110cqw);
   line-height: 1;
-  letter-spacing: -0.04em;
+  letter-spacing: -0.03em;
   font-variant-numeric: tabular-nums;
   font-feature-settings: "tnum" 1;
   color: var(--digit-color);
-  transition: color 0.4s ease, opacity 0.25s ease;
+  transition: color 0.35s ease, opacity 0.25s ease;
 }
 
 .ps-t,
 .ps-ft {
   top: 0;
-  border-radius: 22px 22px 0 0;
-  border-bottom: 1px solid #E2E5DC;
+  border-radius: 21px 21px 0 0;
+  border-bottom: 1px solid rgba(8, 75, 70, 0.1);
   transform-origin: 50% 100%;
 }
 
 .ps-b,
 .ps-fb {
   bottom: 0;
-  border-radius: 0 0 22px 22px;
+  border-radius: 0 0 21px 21px;
   transform-origin: 50% 0%;
 }
 
@@ -519,15 +654,25 @@ body {
   visibility: hidden;
 }
 
-/* One-line Hint (16px semibold, >= 7:1 contrast) */
+/* TapHint */
 .ps-hint {
   width: 100%;
+  flex: none;
   text-align: center;
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 600;
   margin-top: 0;
-  min-height: 22px;
-  transition: color 0.4s ease;
+  min-height: 20px;
+  line-height: 1.2;
+  transition: color 0.35s ease;
+}
+
+.ps-hint-default {
+  display: inline;
+}
+
+.ps-hint-court {
+  display: none;
 }
 
 /* 4. CALL ROW (Team-name block + SERVER block) */
@@ -939,54 +1084,628 @@ body {
   white-space: nowrap;
 }
 
-/* RESPONSIVE BREAKPOINTS */
-@media (max-width: 1199px) {
-  .ps-header {
-    padding: 12px 1.5rem;
+/* RESPONSIVE BREAKPOINTS (1:1 with the 4 Figma Review Frames) */
+
+/* 1. TABLET PORTRAIT — "COURT VIEW" (e.g. 1032x1376 iPad Pro 13 & 820x1180 iPad Air) */
+@media (min-width: 640px) and (max-width: 1099px) and (orientation: portrait) {
+  .ps-scoreboard-header {
+    height: clamp(78px, 7vh, 96px);
+    padding: 0 clamp(28px, 3.88vw, 40px);
+    background-color: #FAF9F5;
+    border-bottom: 0;
   }
+
+  .ps-logo {
+    gap: 16px;
+    font-size: clamp(24px, 2.9vw, 30px);
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    color: #084B46;
+  }
+
+  .ps-logo-mark {
+    width: clamp(38px, 4.26vw, 44px);
+    height: clamp(38px, 4.26vw, 44px);
+  }
+
+  .ps-header-right {
+    gap: 12px;
+  }
+
+  .ps-header-sync {
+    height: 44px;
+    padding: 0 20px;
+    border-radius: 9999px;
+    background-color: #EAF0E5;
+    font-size: clamp(15px, 1.74vw, 18px);
+    font-weight: 500;
+    color: #203F39;
+    gap: 10px;
+  }
+
+  .ps-user-pill {
+    height: 44px;
+    padding: 0 22px;
+    border-radius: 9999px;
+    background-color: #EAF0E5;
+    border: 0;
+    font-size: clamp(15px, 1.74vw, 18px);
+    font-weight: 500;
+    color: #203F39;
+  }
+
   .ps-main {
-    padding: 16px 1.5rem;
+    padding: 0 clamp(20px, 3.1vw, 32px) clamp(20px, 3.1vw, 32px);
   }
-  .ps-teams {
-    gap: 1rem;
+
+  .ps-stage {
+    background-color: #EAF0E5;
+    border: 0;
+    border-radius: 40px;
+    padding: clamp(16px, 2.32vw, 24px);
+    gap: 0;
+  }
+
+  .ps-court-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+  }
+
+  /* Serving team always in top court half (order 1: Point Won), Net Bar in middle (order 2), Receiving team in bottom court half (order 3: Fault) */
+  .ps-team[data-serving="true"] {
+    order: 1 !important;
+    flex: 1;
+    min-height: 0;
+    position: relative;
+    z-index: 2;
+  }
+
+  .ps-control-slot {
+    order: 2 !important;
+    height: clamp(92px, 8.72vh, 120px);
+    flex: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    z-index: 10;
+  }
+
+  .ps-team[data-serving="false"] {
+    order: 3 !important;
+    flex: 1;
+    min-height: 0;
+    position: relative;
+    z-index: 1;
+  }
+
+  /* Dashed Net Line + 22px #203F39 Net Posts */
+  .ps-net-line {
+    display: flex;
+    align-items: center;
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .ps-net-post {
+    width: 22px;
+    height: 22px;
+    border-radius: 9999px;
+    background-color: #203F39;
+    flex: none;
+  }
+
+  .ps-net-cord {
+    flex: 1;
+    height: 0;
+    border-top: 3px dashed #8A9B82;
+  }
+
+  /* ControlPill (760x92 max, fully rounded, #FEFEFB, tonal segments with no strokes) */
+  .ps-bar {
+    position: relative;
+    z-index: 1;
+    width: min(760px, 86%);
+    height: clamp(72px, 6.68vh, 92px);
+    min-height: 0;
+    border-radius: 9999px;
+    background-color: #FEFEFB;
+    border: 0;
+    box-shadow: none;
+  }
+
+  .ps-bar-btn {
+    flex: 1;
+    font-size: clamp(18px, 2.32vw, 24px);
+    font-weight: 500;
+    color: #203F39;
+  }
+
+  .ps-bar-btn:disabled,
+  .ps-bar-btn[aria-disabled="true"] {
+    opacity: 1;
+    color: #8A9B82;
+  }
+
+  .ps-timer-btn {
+    flex: 1.5;
+    background-color: #EAF0E5;
+    border-left: 0;
+    border-right: 0;
+  }
+
+  .ps-tm {
+    font-size: clamp(32px, 4.26vw, 44px);
+    font-weight: 700;
+    color: #084B46;
+  }
+
+  .ps-tl {
+    font-size: clamp(13px, 1.55vw, 16px);
+    font-weight: 400;
+    color: #4E5C55;
+  }
+
+  /* Team Cards in Court View (Tonal surfaces, no borders) */
+  .ps-team {
+    padding: clamp(16px, 1.94vw, 20px);
+    gap: clamp(12px, 1.4vh, 16px);
+    border-radius: 32px;
+    border: 0 !important;
+  }
+
+  /* Lit Serving State (#084B46 card, #0F5C62 header pill, #FEFEFB flap tiles) */
+  .ps-team[data-serving="true"] {
+    background-color: #084B46;
+    --digit-color: #084B46;
+  }
+
+  .ps-team[data-serving="true"] .ps-chip {
+    height: clamp(72px, 6.4vh, 88px);
+    border-radius: 28px;
+    background-color: #0F5C62;
+    padding: 0 20px 0 28px;
+  }
+
+  .ps-team[data-serving="true"] .ps-team-name {
+    font-size: clamp(26px, 3.3vw, 34px);
+    letter-spacing: 0.03em;
+    color: #FEFEFB;
+  }
+
+  .ps-team[data-serving="true"] .ps-active-player-chip {
+    height: 32px;
+    padding: 4px 14px;
+    font-size: 18px;
+    font-weight: 600;
+    background-color: #FEECD6;
+    color: #084B46;
+  }
+
+  .ps-team[data-serving="true"] .ps-server-label {
+    font-size: 16px;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    color: #CFE0D4;
+  }
+
+  .ps-team[data-serving="true"] .ps-server-tile {
+    width: 64px;
+    height: 64px;
+    border-radius: 18px;
+    background-color: #FEECD6;
+    color: #084B46;
+    font-size: 40px;
+    font-weight: 700;
+    border: 0;
+  }
+
+  .ps-team[data-serving="true"] .ps-pair {
+    padding: 0;
+    border: 0;
+    background-color: transparent;
+    gap: 16px;
+  }
+
+  .ps-team[data-serving="true"] .ps-fd {
+    --tile-bg: #FEFEFB;
+    border: 0;
+    border-radius: 28px;
+  }
+
+  .ps-team[data-serving="true"] .ps-hint {
+    font-size: clamp(16px, 1.94vw, 20px);
+    font-weight: 500;
+    color: #CFE0D4;
+  }
+
+  /* Quiet Receiving State (#E2E5DC card, #F4F6F0 header pill & flap tiles) */
+  .ps-team[data-serving="false"] {
+    background-color: #E2E5DC;
+    --digit-color: #4E5C55;
+  }
+
+  .ps-team[data-serving="false"] .ps-chip {
+    height: clamp(72px, 6.4vh, 88px);
+    border-radius: 28px;
+    background-color: #F4F6F0;
+    padding: 0 20px 0 28px;
+  }
+
+  .ps-team[data-serving="false"] .ps-team-name {
+    font-size: clamp(26px, 3.3vw, 34px);
+    letter-spacing: 0.03em;
+    color: #203F39;
+  }
+
+  .ps-team[data-serving="false"] .ps-server-label {
+    font-size: 16px;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    color: #4E5C55;
+  }
+
+  .ps-team[data-serving="false"] .ps-server-tile {
+    width: 64px;
+    height: 64px;
+    border-radius: 18px;
+    background-color: transparent;
+    border: 2px dashed #8A9B82;
+    color: #4E5C55;
+    font-size: 32px;
+    font-weight: 600;
+  }
+
+  .ps-team[data-serving="false"] .ps-pair {
+    padding: 0;
+    border: 0;
+    background-color: transparent;
+    gap: 16px;
+  }
+
+  .ps-team[data-serving="false"] .ps-fd {
+    --tile-bg: #F4F6F0;
+    border: 0;
+    border-radius: 28px;
+  }
+
+  .ps-team[data-serving="false"] .ps-fd[data-dimmed="true"] .ps-h span {
+    opacity: 1 !important;
+    color: #BCC4BA;
+  }
+
+  .ps-team[data-serving="false"] .ps-hint {
+    font-size: clamp(16px, 1.94vw, 20px);
+    font-weight: 500;
+    color: #4E5C55;
+  }
+
+  /* 2px #E2E5DC flap seam & 28px tile radius on Tablet Portrait */
+  .ps-t,
+  .ps-ft {
+    border-radius: 28px 28px 0 0;
+    border-bottom: 2px solid #E2E5DC;
+  }
+
+  .ps-b,
+  .ps-fb {
+    border-radius: 0 0 28px 28px;
+  }
+
+  .ps-h span {
+    font-size: min(88cqh, 95cqw);
+  }
+
+  .ps-hint-default {
+    display: none;
+  }
+
+  .ps-hint-court {
+    display: inline;
   }
 }
 
-@media (max-width: 767px) {
-  .ps-header {
-    padding: 10px 1rem;
+/* 2. PHONE PORTRAIT (390x844: Stacked cards, Serving on top, Header 64 dot-only, Bar 64, Pill 56, Chip 44, space/m 16) */
+@media (max-width: 639px) and (orientation: portrait) {
+  .ps-scoreboard-header {
+    height: 64px;
+    padding: 0 16px;
   }
+
   .ps-logo {
     font-size: 18px;
-    gap: 8px;
+    gap: 12px;
   }
-  .ps-header-actions {
-    gap: 6px;
-    flex-wrap: nowrap;
+
+  .ps-logo-mark {
+    width: 28px;
+    height: 28px;
   }
-  .ps-pill {
-    padding: 8px 12px;
-    font-size: 12px;
+
+  .ps-header-right {
+    gap: 14px;
   }
-  .ps-main {
-    padding: 14px 1rem;
+
+  .ps-sync-text {
+    display: none;
   }
-  .ps-teams {
-    gap: 0.75rem;
+
+  .ps-sync-dot {
+    width: 12px;
+    height: 12px;
   }
-  .ps-bar-btn {
-    padding: 10px 14px;
+
+  .ps-user-pill {
+    height: 36px;
+    padding: 0 14px;
     font-size: 14px;
+  }
+
+  .ps-main {
+    padding: 16px;
+  }
+
+  .ps-stage {
+    padding: 16px;
+    gap: 10px;
+    border-radius: 28px;
+  }
+
+  .ps-court-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .ps-control-slot {
+    order: -1;
+    flex: none;
+  }
+
+  .ps-team[data-serving="true"] {
+    order: 0;
+    flex: 1;
+    min-height: 0;
+  }
+
+  .ps-team[data-serving="false"] {
+    order: 1;
+    flex: 1;
+    min-height: 0;
+  }
+
+  .ps-bar {
+    height: 64px;
+    min-height: 64px;
+    border-radius: 24px;
+  }
+
+  .ps-bar-btn {
+    font-size: 14px;
+    padding: 6px 10px;
+    gap: 6px;
+  }
+
+  .ps-bar-btn svg {
+    width: 17px;
+    height: 17px;
+  }
+
+  .ps-tm {
+    font-size: 24px;
+  }
+
+  .ps-tl {
+    font-size: 11px;
+  }
+
+  .ps-team {
+    padding: 10px;
+    gap: 6px;
+    border-radius: 24px;
+  }
+
+  .ps-chip {
+    height: 56px;
+    padding: 0 6px 0 18px;
+  }
+
+  .ps-chip-left {
+    gap: 10px;
+  }
+
+  .ps-team-name {
+    font-size: 16px;
+  }
+
+  .ps-active-player-chip {
+    height: 26px;
+    padding: 0 10px;
+    font-size: 13px;
+    max-width: 120px;
+  }
+
+  .ps-server-label {
+    font-size: 11px;
+  }
+
+  .ps-server-tile {
+    width: 44px;
+    height: 44px;
+    border-radius: 13px;
+    font-size: 20px;
+  }
+
+  .ps-server-tile[data-active="false"] {
+    font-size: 16px;
+  }
+
+  .ps-pair {
+    padding: 8px;
+    gap: 8px;
+    border-radius: 18px;
+  }
+
+  .ps-fd {
+    border-radius: 16px;
+  }
+
+  .ps-t,
+  .ps-ft {
+    border-radius: 15px 15px 0 0;
+  }
+
+  .ps-b,
+  .ps-fb {
+    border-radius: 0 0 15px 15px;
+  }
+
+  .ps-hint {
+    font-size: 13px;
+    min-height: 16px;
   }
 }
 
-/* Stack panels with serving panel on top below 700px wide */
-@media (max-width: 699px) {
-  .ps-teams {
-    grid-template-columns: 1fr;
+/* 3. PHONE LANDSCAPE (844x390: Side by side cards, Header 52, Bar 54, Pill 68, Chip 64, tighter vertical gaps) */
+@media (max-height: 540px) and (orientation: landscape) {
+  .ps-scoreboard-header {
+    height: 52px;
+    padding: 0 16px;
   }
+
+  .ps-logo {
+    font-size: 18px;
+    gap: 12px;
+  }
+
+  .ps-logo-mark {
+    width: 28px;
+    height: 28px;
+  }
+
+  .ps-header-right {
+    gap: 14px;
+  }
+
+  .ps-user-pill {
+    height: 36px;
+    padding: 0 14px;
+    font-size: 14px;
+  }
+
+  .ps-main {
+    padding: 16px;
+  }
+
+  .ps-stage {
+    padding: 16px;
+    gap: 10px;
+    border-radius: 28px;
+  }
+
+  .ps-court-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: auto minmax(0, 1fr);
+    row-gap: 10px;
+    column-gap: 12px;
+  }
+
+  .ps-bar {
+    height: 54px;
+    min-height: 54px;
+    border-radius: 24px;
+  }
+
+  .ps-bar-btn {
+    font-size: 14px;
+    padding: 4px 10px;
+    gap: 6px;
+  }
+
+  .ps-bar-btn svg {
+    width: 17px;
+    height: 17px;
+  }
+
+  .ps-tm {
+    font-size: 24px;
+  }
+
+  .ps-tl {
+    font-size: 11px;
+  }
+
+  .ps-team {
+    padding: 10px;
+    gap: 6px;
+    border-radius: 24px;
+  }
+
+  .ps-chip {
+    height: 68px;
+    padding: 0 4px 0 18px;
+  }
+
+  .ps-chip-left {
+    gap: 10px;
+  }
+
+  .ps-team-name {
+    font-size: 18px;
+  }
+
+  .ps-active-player-chip {
+    height: 32px;
+    padding: 0 12px;
+    font-size: 14px;
+    max-width: 130px;
+  }
+
+  .ps-server-label {
+    font-size: 11px;
+  }
+
+  .ps-server-tile {
+    width: 64px;
+    height: 64px;
+    border-radius: 32px;
+    font-size: 28px;
+  }
+
+  .ps-server-tile[data-active="false"] {
+    width: 62px;
+    height: 62px;
+    border-radius: 31px;
+    font-size: 22px;
+  }
+
+  .ps-pair {
+    padding: 8px;
+    gap: 8px;
+    border-radius: 18px;
+  }
+
   .ps-fd {
-    height: clamp(140px, 24vh, 220px);
+    border-radius: 16px;
+  }
+
+  .ps-t,
+  .ps-ft {
+    border-radius: 15px 15px 0 0;
+  }
+
+  .ps-b,
+  .ps-fb {
+    border-radius: 0 0 15px 15px;
+  }
+
+  .ps-hint {
+    font-size: 13px;
+    min-height: 16px;
   }
 }
 

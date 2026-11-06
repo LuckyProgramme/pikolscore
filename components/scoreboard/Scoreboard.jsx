@@ -651,86 +651,90 @@ export function Scoreboard() {
           className="ps-main"
           inert={gameWonModalOpen || showAbandonModal || undefined}
         >
-          <ControlBar
-            canUndo={!isGuest && canUndo}
-            canRedo={!isGuest && canRedo}
-            onUndo={handleUndo}
-            onRedo={handleRedo}
-            formattedTime={timer.formattedTime}
-            timerLabel={timer.label}
-            timerStatus={timer.status}
-            onToggleTimer={handleToggleTimer}
-            isGuest={isGuest}
-          />
+          <div className="ps-stage">
+            {/* R11: Match-end inline row with final score, View summary, and New match */}
+            {isMatchOver && (
+              <div
+                role="region"
+                aria-label="Match complete actions"
+                className="flex flex-none flex-wrap items-center justify-between gap-3 rounded-2xl border border-teal bg-pale-sage px-5 py-3 shadow-sm"
+              >
+                <div className="flex items-center gap-2.5 text-base font-bold text-dark-teal">
+                  <Trophy size={20} className="shrink-0 text-teal" aria-hidden="true" />
+                  <span>
+                    {winnerIdx === null
+                      ? `Match tied · Final score ${scores[0]}–${scores[1]}`
+                      : `${teamNames[winnerIdx]} wins · Final score ${scores[winnerIdx]}–${
+                          scores[1 - winnerIdx]
+                        }`}
+                  </span>
+                </div>
 
-          {/* R11: Match-end inline row with final score, View summary, and New match */}
-          {isMatchOver && (
-            <div
-              role="region"
-              aria-label="Match complete actions"
-              className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-teal bg-pale-sage px-5 py-3 shadow-sm"
-            >
-              <div className="flex items-center gap-2.5 text-base font-bold text-dark-teal">
-                <Trophy size={20} className="shrink-0 text-teal" aria-hidden="true" />
-                <span>
-                  {winnerIdx === null
-                    ? `Match tied · Final score ${scores[0]}–${scores[1]}`
-                    : `${teamNames[winnerIdx]} wins · Final score ${scores[winnerIdx]}–${
-                        scores[1 - winnerIdx]
-                      }`}
-                </span>
+                <div className="flex items-center gap-2.5">
+                  <button
+                    type="button"
+                    disabled={isGuest}
+                    onClick={() => !isGuest && setGameWonModalOpen(true)}
+                    className="inline-flex min-h-[44px] items-center justify-center rounded-xl border border-teal bg-ivory px-4 text-sm font-bold text-dark-teal hover:bg-teal/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal cursor-pointer"
+                  >
+                    View summary
+                  </button>
+                  <button
+                    type="button"
+                    disabled={isGuest}
+                    onClick={handleGoToMatches}
+                    className="inline-flex min-h-[44px] items-center justify-center rounded-xl bg-teal px-4 text-sm font-bold text-cream hover:bg-forest-teal focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal cursor-pointer"
+                  >
+                    New match
+                  </button>
+                </div>
               </div>
+            )}
 
-              <div className="flex items-center gap-2.5">
-                <button
-                  type="button"
-                  disabled={isGuest}
-                  onClick={() => !isGuest && setGameWonModalOpen(true)}
-                  className="inline-flex min-h-[44px] items-center justify-center rounded-xl border border-teal bg-ivory px-4 text-sm font-bold text-dark-teal hover:bg-teal/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal cursor-pointer"
-                >
-                  View summary
-                </button>
-                <button
-                  type="button"
-                  disabled={isGuest}
-                  onClick={handleGoToMatches}
-                  className="inline-flex min-h-[44px] items-center justify-center rounded-xl bg-teal px-4 text-sm font-bold text-cream hover:bg-forest-teal focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal cursor-pointer"
-                >
-                  New match
-                </button>
-              </div>
+            <div className="ps-court-grid ps-teams">
+              <ControlBar
+                canUndo={!isGuest && canUndo}
+                canRedo={!isGuest && canRedo}
+                onUndo={handleUndo}
+                onRedo={handleRedo}
+                formattedTime={timer.formattedTime}
+                timerLabel={timer.label}
+                timerStatus={timer.status}
+                onToggleTimer={handleToggleTimer}
+                isGuest={isGuest}
+              />
+
+              <TeamPanel
+                teamIndex={0}
+                teamKey={teamKeys[0]}
+                teamName={teamNames[0]}
+                score={scores[0]}
+                isServing={servingTeam === 0}
+                serverNumber={serverNumber}
+                players={state?.playerNames?.team0}
+                format={state?.format || 'doubles'}
+                isMatchOver={isMatchOver}
+                isWinner={winnerIdx === 0}
+                isLoser={winnerIdx === 1}
+                onPoint={handlePoint}
+                onFault={handleFault}
+              />
+              <TeamPanel
+                teamIndex={1}
+                teamKey={teamKeys[1]}
+                teamName={teamNames[1]}
+                score={scores[1]}
+                isServing={servingTeam === 1}
+                serverNumber={serverNumber}
+                players={state?.playerNames?.team1}
+                format={state?.format || 'doubles'}
+                isMatchOver={isMatchOver}
+                isWinner={winnerIdx === 1}
+                isLoser={winnerIdx === 0}
+                onPoint={handlePoint}
+                onFault={handleFault}
+              />
             </div>
-          )}
-
-          <div className="ps-teams">
-            <TeamPanel
-              teamKey={teamKeys[0]}
-              teamName={teamNames[0]}
-              score={scores[0]}
-              isServing={servingTeam === 0}
-              serverNumber={serverNumber}
-              players={state?.playerNames?.team0}
-              format={state?.format || 'doubles'}
-              isMatchOver={isMatchOver}
-              isWinner={winnerIdx === 0}
-              isLoser={winnerIdx === 1}
-              onPoint={handlePoint}
-              onFault={handleFault}
-            />
-            <TeamPanel
-              teamKey={teamKeys[1]}
-              teamName={teamNames[1]}
-              score={scores[1]}
-              isServing={servingTeam === 1}
-              serverNumber={serverNumber}
-              players={state?.playerNames?.team1}
-              format={state?.format || 'doubles'}
-              isMatchOver={isMatchOver}
-              isWinner={winnerIdx === 1}
-              isLoser={winnerIdx === 0}
-              onPoint={handlePoint}
-              onFault={handleFault}
-            />
           </div>
 
           <div className="ps-sr" aria-live="polite">

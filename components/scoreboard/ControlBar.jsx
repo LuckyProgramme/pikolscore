@@ -24,14 +24,21 @@ export function ControlBar({
   };
 
   return (
-    <div className="relative w-full flex-none">
-      <div className="ps-bar w-full">
+    <div className="ps-control-slot">
+      {/* Pickleball Net Line & Net Posts (visible in Tablet Portrait Court View) */}
+      <div className="ps-net-line" aria-hidden="true">
+        <span className="ps-net-post" />
+        <span className="ps-net-cord" />
+        <span className="ps-net-post" />
+      </div>
+
+      <div className="ps-bar">
         <button
           type="button"
           disabled={!canUndo || isGuest}
           aria-disabled={canUndo && !isGuest ? 'false' : 'true'}
           onClick={handleUndo}
-          className="ps-bar-btn flex-1 min-h-[76px] text-lg font-bold text-deep-green enabled:bg-teal/10 enabled:hover:bg-teal/15 disabled:opacity-40 focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-4 focus-visible:outline-teal"
+          className="ps-bar-btn ps-undo-btn focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-4 focus-visible:outline-teal"
         >
           <svg viewBox="0 0 24 24" aria-hidden="true">
             <path d="M9 14l-4-4 4-4" />
@@ -44,17 +51,10 @@ export function ControlBar({
           type="button"
           disabled={isGuest}
           onClick={onToggleTimer}
-          className="ps-bar-btn ps-timer-btn flex-[1.6] min-h-[76px] focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-4 focus-visible:outline-teal"
+          data-running={isRunning ? 'true' : 'false'}
+          className="ps-bar-btn ps-timer-btn focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-4 focus-visible:outline-teal"
         >
-          <span className="ps-tm flex items-center justify-center gap-2.5">
-            <i
-              aria-hidden="true"
-              className={`size-2.5 rounded-full bg-teal shrink-0 ${
-                isRunning ? 'motion-safe:animate-pulse' : 'opacity-60'
-              }`}
-            />
-            <span>{formattedTime}</span>
-          </span>
+          <span className="ps-tm">{formattedTime}</span>
           <span className="ps-tl">{timerLabel}</span>
         </button>
 
@@ -63,7 +63,7 @@ export function ControlBar({
           disabled={!canRedo || isGuest}
           aria-disabled={canRedo && !isGuest ? 'false' : 'true'}
           onClick={handleRedo}
-          className="ps-bar-btn flex-1 min-h-[76px] text-lg font-bold text-deep-green enabled:hover:bg-pale-sage disabled:opacity-40 focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-4 focus-visible:outline-teal"
+          className="ps-bar-btn ps-redo-btn focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-4 focus-visible:outline-teal"
         >
           <span>Redo</span>
           <svg viewBox="0 0 24 24" aria-hidden="true">

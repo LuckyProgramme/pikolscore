@@ -197,24 +197,21 @@ export function Header({
 
     return (
       <header
-        className="ps-header !h-16 sm:!h-[68px] px-4 sm:px-6"
+        className="ps-header ps-scoreboard-header"
         {...rest}
       >
         <div className="ps-logo">
-          <svg width="36" height="36" viewBox="0 0 40 40" aria-hidden="true">
-            <rect width="40" height="40" rx="12" fill="#0F5C62" />
-            <circle cx="20" cy="20" r="10" fill="#FEECD6" />
-            <circle cx="16.5" cy="16.5" r="1.6" fill="#203F39" />
-            <circle cx="23.5" cy="19" r="1.6" fill="#203F39" />
-            <circle cx="19" cy="24" r="1.6" fill="#203F39" />
+          <svg className="ps-logo-mark" viewBox="0 0 44 44" aria-hidden="true">
+            <rect width="44" height="44" rx="12" fill="#0F5C62" />
+            <circle cx="22" cy="22" r="12.3" fill="#FEECD6" />
           </svg>
           <span>PIKOLSCORE</span>
         </div>
 
-        <div className="flex items-center gap-4 sm:gap-5">
-          {/* Plain status line with dot (no border, no fill) */}
+        <div className="ps-header-right">
+          {/* Status indicator (dot only on Phone Portrait; rounded pale-sage pill on Tablet Portrait; plain dot + text on Desktop & Phone Landscape) */}
           <div
-            className="flex items-center gap-2 text-xs sm:text-sm font-semibold select-none"
+            className="ps-header-sync"
             title={
               syncStatus === 'synced'
                 ? 'All actions synced to cloud'
@@ -232,35 +229,35 @@ export function Header({
                   className="text-[#8A3B08] motion-safe:animate-spin shrink-0"
                   aria-hidden="true"
                 />
-                <span className="text-[#8A3B08]">
+                <span className="ps-sync-text text-[#8A3B08]">
                   Syncing ({pendingCount}){courtSuffix}
                 </span>
               </>
             ) : syncStatus === 'offline' ? (
               <>
                 <span
-                  className="size-2 rounded-full bg-[#384640] shrink-0"
+                  className="ps-sync-dot bg-[#5F6D66] shrink-0"
                   aria-hidden="true"
                 />
-                <span className="text-[#384640]">
+                <span className="ps-sync-text text-[#384640]">
                   Offline ({pendingCount} pending){courtSuffix}
                 </span>
               </>
             ) : syncStatus === 'error' ? (
               <>
                 <span
-                  className="size-2 rounded-full bg-error shrink-0"
+                  className="ps-sync-dot bg-error shrink-0"
                   aria-hidden="true"
                 />
-                <span className="text-error">Sync error{courtSuffix}</span>
+                <span className="ps-sync-text text-error">Sync error{courtSuffix}</span>
               </>
             ) : (
               <>
                 <span
-                  className="size-2 rounded-full bg-[#15803D] shrink-0"
+                  className="ps-sync-dot bg-[#0F5C62] shrink-0"
                   aria-hidden="true"
                 />
-                <span className="text-[#166534]">
+                <span className="ps-sync-text">
                   Synced{courtSuffix}
                 </span>
               </>
@@ -275,13 +272,12 @@ export function Header({
               aria-haspopup="menu"
               aria-expanded={menuOpen}
               onClick={() => setMenuOpen((prev) => !prev)}
-              className="ps-profile-badge cursor-pointer hover:bg-teal/10 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal !px-4 !h-11"
+              className="ps-profile-badge ps-user-pill cursor-pointer hover:bg-teal/10 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal"
             >
-              <User size={15} className="shrink-0 text-dark-teal" aria-hidden="true" />
               <span className="max-w-[130px] truncate">{displayIdentity}</span>
               <ChevronDown
                 size={16}
-                className={`shrink-0 text-deep-green transition-transform duration-150 ${
+                className={`shrink-0 transition-transform duration-150 ${
                   menuOpen ? 'rotate-180' : ''
                 }`}
                 aria-hidden="true"

@@ -64,10 +64,15 @@ export const FlipDigit = memo(function FlipDigit({ value, dimmed = false, classN
     };
   }, [strVal]);
 
-  const spanClass = dimmed ? 'opacity-30' : '';
+  const spanClass = dimmed ? 'ps-digit-dimmed opacity-30' : '';
 
   return (
-    <div ref={elRef} className={`ps-fd ${className}`.trim()} data-v={strVal}>
+    <div
+      ref={elRef}
+      className={`ps-fd ${className}`.trim()}
+      data-v={strVal}
+      data-dimmed={dimmed ? 'true' : 'false'}
+    >
       <div className="ps-h ps-t">
         <span className={spanClass}>{strVal}</span>
       </div>

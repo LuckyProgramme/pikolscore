@@ -6,6 +6,7 @@ import FlipDigit from './FlipDigit';
 const useIsoLayoutEffect = typeof window !== 'undefined' ? useLayoutEffect : useEffect;
 
 export function TeamPanel({
+  teamIndex = 0,
   teamKey,
   teamName,
   score,
@@ -44,6 +45,9 @@ export function TeamPanel({
         window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
       if (before && !calm && typeof el.animate === 'function') {
+        if (typeof el.getAnimations === 'function') {
+          el.getAnimations().forEach((anim) => anim.cancel());
+        }
         const after = el.getBoundingClientRect();
         const dx = before.left - after.left;
         const dy = before.top - after.top;
@@ -53,7 +57,7 @@ export function TeamPanel({
               { transform: `translate(${dx}px, ${dy}px)` },
               { transform: 'translate(0, 0)' },
             ],
-            { duration: 350, easing: 'ease-out' }
+            { duration: 420, easing: 'cubic-bezier(0.22, 1, 0.36, 1)' }
           );
         }
       }
@@ -82,6 +86,14 @@ export function TeamPanel({
     : isServing
     ? 'Tap: point won'
     : 'Tap: fault';
+
+  const courtHintText = isMatchOver
+    ? isWinner
+      ? 'Match winner'
+      : 'Match complete'
+    : isServing
+    ? 'Tap anywhere: point won'
+    : 'Tap anywhere: fault';
 
   const ariaLabel = isMatchOver
     ? `${teamName}, ${roleText.toLowerCase()}, final score ${numericScore}. Match complete.`
@@ -169,51 +181,32 @@ export function TeamPanel({
       disabled={isMatchOver}
       className={`ps-team ${isMatchOver && isLoser ? 'opacity-55' : ''}`}
       data-team={teamKey}
+      data-team-idx={teamIndex}
       data-serving={effectiveServing ? 'true' : 'false'}
       aria-label={ariaLabel}
       onClick={handleActivate}
     >
       <div className="ps-chip">
-        {/* Left: Team Name */}
-        <div className="flex min-w-0 items-center text-left">
-          <span
-            className={`truncate text-lg sm:text-2xl font-extrabold uppercase tracking-wide leading-none ${
-              effectiveServing ? 'text-[#FEFEFB]' : 'text-[#203F39]'
-            }`}
-          >
-            {teamName}
-          </span>
-        </div>
+        {/* Left: Team Name + Active Server Player Cream Chip */}
+        <div className="ps-chip-left">
+          <span className="ps-team-name">{teamName}</span>
 
-        {/* Center: Single Active Server Name Pill (Serving card only, 3D flips when server changes) */}
-        {showActiveServerTile && activeServerName && (
-          <div className="mx-auto flex items-center justify-center min-w-0 px-2">
+          {showActiveServerTile && activeServerName && (
             <span
               ref={serverPillRef}
-              className="inline-block max-w-[140px] sm:max-w-[180px] truncate rounded-full border border-[#FEFEFB]/80 bg-[#FEECD6] px-4 py-1.5 text-center text-sm sm:text-base font-extrabold normal-case tracking-normal text-[#084B46] shadow-sm"
+              className="ps-active-player-chip"
             >
               {activeServerName}
             </span>
-          </div>
-        )}
+          )}
+        </div>
 
-        {/* Right: Contrasting SERVER label + Server Number Tile */}
-        <div className="ml-auto flex items-center gap-2 sm:gap-2.5 shrink-0">
+        {/* Right: SERVER label + Server Chip */}
+        <div className="ps-chip-right">
+          <span className="ps-server-label">SERVER</span>
           <span
-            className={`text-[11px] sm:text-xs font-extrabold uppercase tracking-widest ${
-              effectiveServing ? 'text-[#FEECD6]' : 'text-[#203F39]'
-            }`}
-          >
-            Server
-          </span>
-          <span
-            className={`grid size-13 sm:size-14 place-items-center rounded-xl text-2xl sm:text-3xl font-black leading-none transition-colors ${
-              showActiveServerTile
-                ? 'bg-[#FEECD6] text-[#084B46] border-2 border-[#FEFEFB] shadow-md'
-                : effectiveServing
-                ? 'border-2 border-dashed border-[#FEECD6]/60 text-[#FEECD6] opacity-80'
-                : 'bg-[#FAF9F5] text-[#203F39] border-2 border-dashed border-[#203F39]/45'
-            }`}
+            className="ps-server-tile"
+            data-active={showActiveServerTile ? 'true' : 'false'}
           >
             {showActiveServerTile ? displayedServerNum : '–'}
           </span>
@@ -225,7 +218,10 @@ export function TeamPanel({
         <FlipDigit value={units} />
       </div>
 
-      <div className="ps-hint">{hintText}</div>
+      <div className="ps-hint">
+        <span className="ps-hint-default">{hintText}</span>
+        <span className="ps-hint-court">{courtHintText}</span>
+      </div>
     </button>
   );
 }
