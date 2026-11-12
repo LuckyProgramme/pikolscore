@@ -1275,8 +1275,8 @@ export default function ScreenView() {
             </div>
 
             {/* Serving Team Score Digits */}
-            <div className="flex gap-3 justify-center items-center py-3">
-              <FlipDigit value={servingPadded[0]} />
+            <div className="flex gap-3 justify-center items-center py-3 h-44 sm:h-52 [--digit-color:#084B46]">
+              <FlipDigit value={servingPadded[0]} dimmed={servingPadded[0] === '0'} />
               <FlipDigit value={servingPadded[1]} />
             </div>
 
@@ -1311,8 +1311,8 @@ export default function ScreenView() {
             </div>
 
             {/* Receiving Team Score Digits */}
-            <div className="flex gap-3 justify-center items-center py-3">
-              <FlipDigit value={receivingPadded[0]} />
+            <div className="flex gap-3 justify-center items-center py-3 h-44 sm:h-52 [--digit-color:#5F6D66]">
+              <FlipDigit value={receivingPadded[0]} dimmed={receivingPadded[0] === '0'} />
               <FlipDigit value={receivingPadded[1]} />
             </div>
 

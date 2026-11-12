@@ -427,23 +427,23 @@ export function LoginForm({ initialMode = 'signin' }) {
 
   return (
     <section className="relative flex flex-col items-center bg-pale-sage px-8 pt-10 pb-10">
-      <div className="mb-6 ml-6 flex items-center justify-between self-start w-[calc(100%-1.5rem)]">
+      <div className="mb-6 flex items-center justify-between w-full max-w-[440px]">
         <Link
           href={`/umpire${sessionSuffix}`}
           aria-label="PikolScore Umpire Console"
-          className="flex items-center gap-3 text-[26px] font-bold tracking-[-0.01em] text-dark-teal no-underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal"
+          className="flex items-center gap-2.5 sm:gap-3 text-[22px] sm:text-[26px] font-bold tracking-[-0.01em] text-dark-teal no-underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal"
         >
-          <svg width="40" height="40" viewBox="0 0 40 40" aria-hidden="true">
+          <svg width="40" height="40" viewBox="0 0 40 40" aria-hidden="true" className="shrink-0">
             <rect width="40" height="40" rx="12" fill="#0F5C62" />
             <circle cx="20" cy="20" r="10" fill="#FEECD6" />
             <circle cx="16.5" cy="16.5" r="1.6" fill="#084B46" />
             <circle cx="23.5" cy="19" r="1.6" fill="#084B46" />
             <circle cx="19" cy="24" r="1.6" fill="#084B46" />
           </svg>
-          {AUTH_CONTENT.brand}
+          <span>{AUTH_CONTENT.brand}</span>
         </Link>
-        <div className="flex items-center gap-2.5">
-          <span className="rounded-full bg-teal/10 px-3 py-1 text-[12px] font-semibold text-dark-teal border border-teal/20">
+        <div className="flex items-center gap-2.5 shrink-0">
+          <span className="whitespace-nowrap rounded-full bg-teal/10 px-3 py-1 text-[12px] font-semibold text-dark-teal border border-teal/20">
             Umpire Console
           </span>
         </div>
