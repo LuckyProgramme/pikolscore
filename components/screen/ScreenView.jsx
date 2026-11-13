@@ -21,7 +21,6 @@ import {
   Users,
   RefreshCw,
   Unlink,
-  Check,
   Loader2,
   Trophy,
   ArrowLeftRight,
@@ -30,6 +29,10 @@ import {
 import QRCode from 'qrcode';
 import { supabase } from '@/config/supabase';
 import FlipDigit from '@/components/scoreboard/FlipDigit';
+import StandbyPoster, {
+  STANDBY_POSTER_FIXTURES,
+} from '@/components/tv/StandbyPoster';
+import { buildPosterPropsFromSession } from '@/lib/standby-poster';
 import { formatMmSs } from '@/hooks/useMatchTimer';
 import { getSynth } from '@/lib/audio';
 import {
@@ -42,7 +45,7 @@ import {
 
 const outfit = Outfit({
   subsets: ['latin'],
-  weight: ['400', '500', '600', '700', '800'],
+  weight: ['400', '500', '600', '700', '800', '900'],
   variable: '--font-outfit',
   display: 'swap',
 });
@@ -67,17 +70,23 @@ export default function ScreenView() {
   const router = useRouter();
   const [tvId, setTvId] = useState('');
   const [pairedCourt, setPairedCourt] = useState(null); // 1..4 or null
+  const [fixtureMode, setFixtureMode] = useState(null);
   const [courtsData, setCourtsData] = useState({});
   const [isLoading, setIsLoading] = useState(true);
   const [muted, setMuted] = useState(false);
   const [pairingQrSvg, setPairingQrSvg] = useState('');
-  const [courtQrSvg, setCourtQrSvg] = useState('');
+  const [profilesById, setProfilesById] = useState({});
+  const [showPoster, setShowPoster] = useState(false);
+  const [isPosterFading, setIsPosterFading] = useState(false);
+  const [posterControlsVisible, setPosterControlsVisible] = useState(false);
   const [sideOutNotice, setSideOutNotice] = useState('');
   const [abandonCountdown, setAbandonCountdown] = useState(null); // 5..0 when match is abandoned
   const [, setTick] = useState(0);
 
   // Refs for tracking score/serve transitions & FLIP animation on side-out
   const prevMatchSnapRef = useRef(null);
+  const prevMatchStartedRef = useRef(null);
+  const controlsTimerRef = useRef(null);
   const servingCardRef = useRef(null);
   const receivingCardRef = useRef(null);
   const prevServingTeamRef = useRef(null);
@@ -95,6 +104,10 @@ export default function ScreenView() {
 
     const params = new URLSearchParams(window.location.search);
     const urlCourt = Number(params.get('court'));
+    const urlFixture = params.get('fixture');
+    if (urlFixture) {
+      setFixtureMode(urlFixture);
+    }
 
     let storedTvId = normalizeTvId(window.localStorage.getItem(TV_ID_STORAGE_KEY));
     if (!storedTvId || storedTvId.length > 12) {
@@ -141,7 +154,15 @@ export default function ScreenView() {
   const handleUnpairTv = useCallback(() => {
     setPairedCourt(null);
     setAbandonCountdown(null);
+    setShowPoster(false);
+    setIsPosterFading(false);
+    setPosterControlsVisible(false);
+    if (controlsTimerRef.current) {
+      clearTimeout(controlsTimerRef.current);
+      controlsTimerRef.current = null;
+    }
     prevMatchSnapRef.current = null;
+    prevMatchStartedRef.current = null;
     abandonTriggeredRef.current = false;
     completedRedirectRef.current = false;
     const freshId = generateTvId();
@@ -396,16 +417,11 @@ export default function ScreenView() {
     return () => clearInterval(t);
   }, []);
 
-  // 5. Generate QR Code SVGs
+  // 5. Generate Pairing QR Code SVG (used on View 1 unpaired screen)
   const pairingUrl = useMemo(() => {
     if (typeof window === 'undefined' || !tvId) return '';
     return `${window.location.origin}/?tv=${encodeURIComponent(tvId)}`;
   }, [tvId]);
-
-  const playerCourtUrl = useMemo(() => {
-    if (typeof window === 'undefined' || !pairedCourt) return '';
-    return `${window.location.origin}/?court=${encodeURIComponent(pairedCourt)}`;
-  }, [pairedCourt]);
 
   useEffect(() => {
     if (!pairingUrl) return;
@@ -426,24 +442,21 @@ export default function ScreenView() {
     };
   }, [pairingUrl]);
 
+  // Light catch-up refresh when TV browser window regains focus or visibility
   useEffect(() => {
-    if (!playerCourtUrl) return;
-    let mounted = true;
-    QRCode.toString(
-      playerCourtUrl,
-      {
-        type: 'svg',
-        margin: 1,
-        color: { dark: '#084B46', light: '#FEFEFB' },
-      },
-      (err, svg) => {
-        if (!err && mounted) setCourtQrSvg(svg);
+    if (!tvId || fixtureMode) return;
+    const handleRefresh = () => {
+      if (document.visibilityState === 'visible') {
+        fetchCourts(tvId);
       }
-    );
-    return () => {
-      mounted = false;
     };
-  }, [playerCourtUrl]);
+    window.addEventListener('focus', handleRefresh);
+    document.addEventListener('visibilitychange', handleRefresh);
+    return () => {
+      window.removeEventListener('focus', handleRefresh);
+      document.removeEventListener('visibilitychange', handleRefresh);
+    };
+  }, [tvId, fixtureMode, fetchCourts]);
 
   // Current paired court session (keep last active session frozen in background during 5s abandon countdown)
   const rawCourtSession = pairedCourt ? courtsData[pairedCourt] || null : null;
@@ -463,6 +476,163 @@ export default function ScreenView() {
       (activeSession.status === 'in_progress' || abandonCountdown !== null) &&
       activeSession.player_names?.lobbyLocked === true
   );
+
+  // Extract registered userIds from standby slots to look up cutout photos in profiles
+  const activeSlotUserIds = useMemo(() => {
+    const slots = activeSession?.player_names?.slots;
+    if (!slots) return [];
+    const ids = [];
+    for (const teamKey of ['team0', 'team1']) {
+      const arr = Array.isArray(slots[teamKey]) ? slots[teamKey] : [];
+      for (const slot of arr) {
+        if (slot?.userId && typeof slot.userId === 'string') {
+          ids.push(slot.userId);
+        }
+      }
+    }
+    return Array.from(new Set(ids)).sort();
+  }, [activeSession]);
+
+  const activeSlotUserIdsKey = activeSlotUserIds.join(',');
+
+  useEffect(() => {
+    if (
+      !pairedCourt ||
+      isMatchStarted ||
+      fixtureMode ||
+      activeSlotUserIds.length === 0
+    ) {
+      return;
+    }
+
+    let cancelled = false;
+    const loadProfiles = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('id, full_name, avatar_url, photo_urls')
+          .in('id', activeSlotUserIds);
+
+        if (cancelled || error || !Array.isArray(data)) return;
+        setProfilesById((prev) => {
+          const next = { ...prev };
+          for (const row of data) {
+            if (row?.id) next[row.id] = row;
+          }
+          return next;
+        });
+      } catch (err) {
+        console.warn('[ScreenView] Failed to fetch standby profiles:', err);
+      }
+    };
+
+    loadProfiles();
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    pairedCourt,
+    isMatchStarted,
+    fixtureMode,
+    activeSlotUserIdsKey,
+    activeSlotUserIds,
+    activeSession?.version,
+    activeSession?.updated_at,
+  ]);
+
+  const posterProps = useMemo(
+    () =>
+      buildPosterPropsFromSession({
+        session: activeSession,
+        pairedCourt,
+        profilesById,
+      }),
+    [activeSession, pairedCourt, profilesById]
+  );
+
+  // Manage StandbyPoster -> live scoreboard crossfade (~300ms) and unmount on start
+  useEffect(() => {
+    if (!pairedCourt || isLoading || fixtureMode) {
+      prevMatchStartedRef.current = null;
+      setShowPoster(false);
+      setIsPosterFading(false);
+      return;
+    }
+
+    const wasStarted = prevMatchStartedRef.current;
+    prevMatchStartedRef.current = isMatchStarted;
+
+    if (!isMatchStarted) {
+      setShowPoster(true);
+      setIsPosterFading(false);
+      return;
+    }
+
+    // Entered directly into an already-live match on load, or abandoning -> skip poster
+    if (wasStarted === null || abandonCountdown !== null) {
+      setShowPoster(false);
+      setIsPosterFading(false);
+      return;
+    }
+
+    // Transitioned from standby (false) -> live (true): crossfade then unmount
+    if (wasStarted === false && isMatchStarted === true) {
+      const prefersReducedMotion =
+        typeof window !== 'undefined' &&
+        typeof window.matchMedia === 'function' &&
+        window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+      if (prefersReducedMotion) {
+        setShowPoster(false);
+        setIsPosterFading(false);
+        return;
+      }
+
+      setShowPoster(true);
+      setIsPosterFading(false);
+      setPosterControlsVisible(false);
+
+      let raf1 = null;
+      let raf2 = null;
+      let unmountTimer = null;
+
+      raf1 = window.requestAnimationFrame(() => {
+        raf2 = window.requestAnimationFrame(() => {
+          setIsPosterFading(true);
+        });
+      });
+
+      unmountTimer = window.setTimeout(() => {
+        setShowPoster(false);
+        setIsPosterFading(false);
+      }, 320);
+
+      return () => {
+        if (raf1 !== null) window.cancelAnimationFrame(raf1);
+        if (raf2 !== null) window.cancelAnimationFrame(raf2);
+        if (unmountTimer !== null) window.clearTimeout(unmountTimer);
+      };
+    }
+  }, [pairedCourt, isLoading, isMatchStarted, abandonCountdown, fixtureMode]);
+
+  const revealPosterControls = useCallback(() => {
+    setPosterControlsVisible(true);
+    if (controlsTimerRef.current) {
+      clearTimeout(controlsTimerRef.current);
+    }
+    controlsTimerRef.current = setTimeout(() => {
+      setPosterControlsVisible(false);
+      controlsTimerRef.current = null;
+    }, 3000);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (controlsTimerRef.current) {
+        clearTimeout(controlsTimerRef.current);
+      }
+    };
+  }, []);
 
   // 5b. Active match heartbeat fallback: if RLS hides an 'abandoned' update from anon
   // or a socket packet is missed, verify the active session status every 2.5 seconds.
@@ -683,6 +853,23 @@ export default function ScreenView() {
   ]);
 
   // ===========================================================================
+  // DEV / PHASE 1 FIXTURE MODE (?fixture=1 | figma | singles | empty | initials)
+  // ===========================================================================
+  if (fixtureMode) {
+    const key =
+      fixtureMode === '1' || fixtureMode === 'true' || fixtureMode === 'poster'
+        ? 'doubles'
+        : fixtureMode;
+    const fixtureProps =
+      STANDBY_POSTER_FIXTURES[key] || STANDBY_POSTER_FIXTURES.doubles;
+    return (
+      <div className={`${outfit.variable} ${outfit.className}`}>
+        <StandbyPoster {...fixtureProps} />
+      </div>
+    );
+  }
+
+  // ===========================================================================
   // VIEW 1: UNPAIRED TV — DISPLAY UMPIRE PAIRING QR CODE
   // ===========================================================================
   if (!pairedCourt) {
@@ -844,239 +1031,27 @@ export default function ScreenView() {
   }
 
   // ===========================================================================
-  // VIEW 2: PAIRED TO COURT (1..4) — PRE-MATCH LOBBY PHASE
+  // LOADING SPLASH WHILE PAIRED COURT SESSION STATE IS BEING FETCHED
   // ===========================================================================
-  if (!isMatchStarted) {
-    const umpireName = activeSession?.player_names?.umpireName || null;
-    const assignedUmpireId = getAssignedUmpireId(activeSession);
-    const pSlots = activeSession?.player_names?.slots || {};
-    const team0Slots = pSlots.team0 || [null, null];
-    const team1Slots = pSlots.team1 || [null, null];
-    const teamNames = activeSession?.team_names || ['Team A', 'Team B'];
-
-    const filledCount =
-      (team0Slots[0]?.name ? 1 : 0) +
-      (team0Slots[1]?.name ? 1 : 0) +
-      (team1Slots[0]?.name ? 1 : 0) +
-      (team1Slots[1]?.name ? 1 : 0);
-
+  if (isLoading) {
     return (
       <div
-        className={`${outfit.className} min-h-screen bg-[#FAF9F5] text-[#203F39] flex flex-col justify-between font-outfit`}
-      >
-        {/* Top Broadcast Bar */}
-        <header className="h-20 px-6 sm:px-10 bg-[#FEFEFB] border-b border-[#E2E5DC] flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <svg width="38" height="38" viewBox="0 0 40 40" aria-hidden="true">
-              <rect width="40" height="40" rx="10" fill="#0F5C62" />
-              <circle cx="20" cy="20" r="8" fill="#FEECD6" />
-              <circle cx="17" cy="17" r="1.3" fill="#084B46" />
-              <circle cx="23" cy="19" r="1.3" fill="#084B46" />
-              <circle cx="19" cy="23" r="1.3" fill="#084B46" />
-            </svg>
-            <span className="text-2xl font-black text-[#084B46] tracking-tight">
-              PIKOLSCORE
-            </span>
-            <span className="ml-2 rounded-full bg-[#0F5C62] px-4 py-1 text-sm font-bold text-[#FEECD6]">
-              Court {pairedCourt}
-            </span>
-            <span className="rounded-full bg-[#EAF0E5] px-3.5 py-1 text-xs font-bold text-[#0F5C62] border border-[#E2E5DC] flex items-center gap-1.5">
-              <Shield size={14} />
-              <span>
-                {assignedUmpireId
-                  ? `Umpire: ${umpireName || 'Official Umpire'}`
-                  : 'Waiting for Umpire'}
-              </span>
-            </span>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={handleToggleMute}
-              className="flex items-center gap-2 px-4 py-2 rounded-full bg-[#FAF9F5] border border-[#E2E5DC] text-xs font-bold text-[#084B46] hover:bg-[#EAF0E5] transition-colors cursor-pointer"
-            >
-              {muted ? <VolumeX size={15} /> : <Volume2 size={15} />}
-              <span>{muted ? 'Muted' : 'Sound On'}</span>
-            </button>
-            <button
-              type="button"
-              onClick={handleUnpairTv}
-              className="flex items-center gap-1.5 px-4 py-2 rounded-full bg-[#FAF9F5] border border-[#E2E5DC] text-xs font-semibold text-[#748079] hover:text-[#BA1A1A] hover:border-red-200 transition-colors cursor-pointer"
-              title="Unpair TV or switch court"
-            >
-              <Unlink size={14} />
-              <span>Change Court / Unpair</span>
-            </button>
-          </div>
-        </header>
-
-        {/* Main Pre-Match Court Lobby Content */}
-        <main className="flex-1 max-w-6xl mx-auto w-full px-6 sm:px-10 py-8 flex flex-col justify-center gap-8">
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-stretch">
-            {/* Left Column: Player Court Join QR Code */}
-            <div className="lg:col-span-5 rounded-[32px] bg-[#FEFEFB] border-2 border-[#E2E5DC] p-8 flex flex-col items-center justify-center text-center shadow-sm">
-              <span className="rounded-full bg-[#EAF0E5] px-3.5 py-1 text-xs font-bold uppercase tracking-wider text-[#0F5C62] border border-[#E2E5DC] mb-4">
-                Player Check-In QR
-              </span>
-              <div className="bg-white p-5 rounded-3xl border-2 border-[#0F5C62]/20 shadow-sm">
-                {courtQrSvg ? (
-                  <div
-                    className="w-52 h-52 sm:w-56 sm:h-56 flex items-center justify-center [&>svg]:w-full [&>svg]:h-full"
-                    dangerouslySetInnerHTML={{ __html: courtQrSvg }}
-                  />
-                ) : (
-                  <div className="w-52 h-52 flex items-center justify-center">
-                    <Loader2 size={32} className="animate-spin text-[#0F5C62]" />
-                  </div>
-                )}
-              </div>
-              <h2 className="text-xl font-extrabold text-[#084B46] mt-5 mb-1">
-                Scan to Join Court {pairedCourt}
-              </h2>
-              <p className="text-sm text-[#748079] m-0 max-w-xs">
-                Players can scan this QR code with their phone to claim a Team A or Team B slot.
-              </p>
-            </div>
-
-            {/* Right Column: Live Team A & Team B Roster Slots */}
-            <div className="lg:col-span-7 rounded-[32px] bg-[#FEFEFB] border-2 border-[#E2E5DC] p-8 flex flex-col justify-between shadow-sm">
-              <div>
-                <div className="flex items-center justify-between pb-4 mb-6 border-b border-[#E2E5DC]">
-                  <div>
-                    <span className="text-xs font-bold uppercase tracking-widest text-[#0F5C62]">
-                      Pre-Match Court Lobby
-                    </span>
-                    <h1 className="text-2xl sm:text-3xl font-extrabold text-[#084B46] m-0 mt-0.5">
-                      Court {pairedCourt} Player Roster
-                    </h1>
-                  </div>
-                  <div className="rounded-2xl bg-[#EAF0E5] px-4 py-2 border border-[#E2E5DC] text-right">
-                    <div className="text-xs font-bold uppercase text-[#748079]">
-                      Slots Claimed
-                    </div>
-                    <div className="text-2xl font-black text-[#084B46]">
-                      {filledCount} / 4
-                    </div>
-                  </div>
-                </div>
-
-                {/* 2 Teams Grid */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-                  {/* Team A */}
-                  <div className="rounded-2xl bg-[#EAF0E5]/50 border border-[#E2E5DC] p-5 flex flex-col gap-3">
-                    <div className="flex items-center justify-between">
-                      <span className="text-lg font-extrabold text-[#084B46]">
-                        {teamNames[0] || 'Team A'}
-                      </span>
-                      <span className="text-xs font-bold uppercase tracking-wider text-[#0F5C62]">
-                        Side 1
-                      </span>
-                    </div>
-                    {[0, 1].map((sIdx) => {
-                      const slot = team0Slots[sIdx];
-                      const hasPlayer = Boolean(slot?.name?.trim());
-                      return (
-                        <div
-                          key={`tv-t0-${sIdx}`}
-                          className={`h-14 px-4 rounded-xl border flex items-center justify-between ${
-                            hasPlayer
-                              ? 'bg-white border-[#0F5C62] shadow-sm'
-                              : 'bg-[#FAF9F5] border-dashed border-[#E2E5DC]'
-                          }`}
-                        >
-                          {hasPlayer ? (
-                            <>
-                              <span className="text-base font-bold text-[#084B46] truncate">
-                                {slot.name}
-                              </span>
-                              <span className="inline-flex items-center gap-1 rounded-full bg-[#EAF0E5] px-2.5 py-0.5 text-[11px] font-bold text-[#0F5C62]">
-                                <Check size={12} /> Ready
-                              </span>
-                            </>
-                          ) : (
-                            <span className="text-sm font-medium text-[#748079] italic">
-                              Slot {sIdx + 1} · Open
-                            </span>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-
-                  {/* Team B */}
-                  <div className="rounded-2xl bg-[#EAF0E5]/50 border border-[#E2E5DC] p-5 flex flex-col gap-3">
-                    <div className="flex items-center justify-between">
-                      <span className="text-lg font-extrabold text-[#084B46]">
-                        {teamNames[1] || 'Team B'}
-                      </span>
-                      <span className="text-xs font-bold uppercase tracking-wider text-[#0F5C62]">
-                        Side 2
-                      </span>
-                    </div>
-                    {[0, 1].map((sIdx) => {
-                      const slot = team1Slots[sIdx];
-                      const hasPlayer = Boolean(slot?.name?.trim());
-                      return (
-                        <div
-                          key={`tv-t1-${sIdx}`}
-                          className={`h-14 px-4 rounded-xl border flex items-center justify-between ${
-                            hasPlayer
-                              ? 'bg-white border-[#0F5C62] shadow-sm'
-                              : 'bg-[#FAF9F5] border-dashed border-[#E2E5DC]'
-                          }`}
-                        >
-                          {hasPlayer ? (
-                            <>
-                              <span className="text-base font-bold text-[#084B46] truncate">
-                                {slot.name}
-                              </span>
-                              <span className="inline-flex items-center gap-1 rounded-full bg-[#EAF0E5] px-2.5 py-0.5 text-[11px] font-bold text-[#0F5C62]">
-                                <Check size={12} /> Ready
-                              </span>
-                            </>
-                          ) : (
-                            <span className="text-sm font-medium text-[#748079] italic">
-                              Slot {sIdx + 1} · Open
-                            </span>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              </div>
-
-              {/* Bottom Status Bar */}
-              <div className="mt-6 p-4 rounded-2xl bg-[#084B46] text-[#FEFEFB] flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <span className="h-2.5 w-2.5 rounded-full bg-[#FEECD6] animate-pulse" />
-                  <span className="text-sm font-bold">
-                    {filledCount === 4
-                      ? 'All 4 Players Registered — Waiting for Umpire to Start Match (30:00)'
-                      : `Waiting for ${4 - filledCount} more player${
-                          4 - filledCount === 1 ? '' : 's'
-                        } to join Court ${pairedCourt}...`}
-                  </span>
-                </div>
-                <span className="text-xs font-semibold text-[#FEECD6]">
-                  Auto-starts on Umpire signal
-                </span>
-              </div>
-            </div>
-          </div>
-        </main>
-      </div>
+        className={`${outfit.variable} ${outfit.className} fixed inset-0 bg-poster-stage font-outfit`}
+        aria-busy="true"
+      />
     );
   }
 
   // ===========================================================================
-  // VIEW 3: ACTIVE MATCH — 3-CARD SIDE-OUT SCOREBOARD
+  // VIEW 3: ACTIVE MATCH — 3-CARD SIDE-OUT SCOREBOARD (rendered behind poster during fade)
   // Pattern: [Serving Team Score] : [Receiving Team Score] : [Server #]
   // ===========================================================================
-  const tNames = activeSession.team_names || ['Team A', 'Team B'];
-  const pNames = activeSession.player_names || {};
-  const slots = pNames.slots || {};
+  const renderScoreboard = () => {
+    if (!isMatchStarted || !activeSession) return null;
+
+    const tNames = activeSession.team_names || ['Team A', 'Team B'];
+    const pNames = activeSession.player_names || {};
+    const slots = pNames.slots || {};
 
   const getTeamRosterLabel = (teamIndex) => {
     const key = teamIndex === 0 ? 'team0' : 'team1';
@@ -1410,5 +1385,66 @@ export default function ScreenView() {
         </div>
       )}
     </div>
+    );
+  };
+
+  // ===========================================================================
+  // VIEW 2: STANDBY POSTER + ~300ms CROSSFADE INTO SCOREBOARD
+  // Unmounts completely once match is live and fade completes
+  // ===========================================================================
+  const shouldRenderPoster = !isMatchStarted || showPoster;
+
+  return (
+    <>
+      {renderScoreboard()}
+
+      {shouldRenderPoster && (
+        <div
+          className={`fixed inset-0 z-50 ${outfit.variable} ${outfit.className} font-outfit transition-opacity duration-300 ease-out motion-reduce:duration-0 ${
+            isPosterFading ? 'opacity-0 pointer-events-none' : 'opacity-100'
+          }`}
+          onMouseMove={revealPosterControls}
+          onPointerDown={revealPosterControls}
+          onTouchStart={revealPosterControls}
+          onFocusCapture={revealPosterControls}
+        >
+          <StandbyPoster {...posterProps} />
+
+          {/* Subtle auto-hiding TV controls on pointer move / touch / focus */}
+          <div
+            className={`fixed top-5 right-6 z-[60] flex items-center gap-2 rounded-full bg-poster-stage/90 backdrop-blur-md border border-poster-cream/20 px-3 py-1.5 shadow-lg transition-opacity duration-200 focus-within:opacity-100 focus-within:pointer-events-auto ${
+              posterControlsVisible && !isPosterFading
+                ? 'opacity-100 pointer-events-auto'
+                : 'opacity-0 pointer-events-none'
+            }`}
+          >
+            <span className="px-2 text-xs font-semibold tracking-wider uppercase text-poster-cream/75">
+              Court {pairedCourt}
+            </span>
+            <button
+              type="button"
+              onClick={handleToggleMute}
+              tabIndex={isPosterFading ? -1 : 0}
+              className="flex items-center gap-1.5 rounded-full bg-poster-cream/10 hover:bg-poster-cream/20 px-3 py-1.5 text-xs font-bold text-poster-cream transition-colors cursor-pointer"
+              aria-label={muted ? 'Unmute TV sound' : 'Mute TV sound'}
+            >
+              {muted ? <VolumeX size={14} /> : <Volume2 size={14} />}
+              <span>{muted ? 'Muted' : 'Sound'}</span>
+            </button>
+            <button
+              type="button"
+              onClick={handleUnpairTv}
+              tabIndex={isPosterFading ? -1 : 0}
+              className="flex items-center gap-1.5 rounded-full bg-poster-cream/10 hover:bg-red-500/30 px-3 py-1.5 text-xs font-semibold text-poster-cream transition-colors cursor-pointer"
+              title="Unpair TV or switch court"
+              aria-label="Unpair TV or change court"
+            >
+              <Unlink size={14} />
+              <span>Change Court</span>
+            </button>
+          </div>
+        </div>
+      )}
+    </>
   );
 }

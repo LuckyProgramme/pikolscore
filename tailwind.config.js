@@ -40,6 +40,13 @@ export default {
         forest: '#203F39',
         'line-soft': '#E2E5DC',
         jade: '#8A9B82',
+        // TV Standby Poster tokens
+        'poster-stage': '#0C211E',
+        'poster-teal-deep': '#073A38',
+        'poster-sage-deep': '#14302B',
+        'poster-sage-mid': '#2A4F47',
+        'poster-teal-glow': '#3AA7AC',
+        'poster-ink': '#0E2622',
       },
       fontFamily: {
         outfit: ['var(--font-outfit)', 'Outfit', 'system-ui', 'sans-serif'],
@@ -49,9 +56,14 @@ export default {
           '0%': { transform: 'rotateX(-85deg)', opacity: '0.2' },
           '100%': { transform: 'none', opacity: '1' },
         },
+        'poster-enter': {
+          '0%': { opacity: '0', transform: 'translateY(24px)' },
+          '100%': { opacity: '1', transform: 'translateY(0)' },
+        },
       },
       animation: {
         flip: 'flip 0.38s ease-out',
+        'poster-enter': 'poster-enter 400ms cubic-bezier(0.22, 1, 0.36, 1) both',
       },
     },
   },

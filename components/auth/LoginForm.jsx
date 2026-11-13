@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Eye, X } from 'lucide-react';
+import { ChevronRight, Eye, EyeOff, Loader2, X } from 'lucide-react';
 import { supabase } from '@/config/supabase';
 import { AUTH_CONTENT } from '@/config/content/auth';
 import {
@@ -15,6 +15,14 @@ import {
 import { TV_RETURN_TO_ROLE_KEY } from '@/lib/tv-pairing';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const TWO_DAYS_MS = 2 * 24 * 60 * 60 * 1000;
+
+function maskEmail(email) {
+  if (!email || typeof email !== 'string' || !email.includes('@')) return '';
+  const [local, domain] = email.split('@');
+  const firstChar = local[0] || '';
+  return `${firstChar}•••@${domain}`;
+}
 
 function getInitials(name, email) {
   const source = (name || email || 'U').trim();
@@ -23,6 +31,15 @@ function getInitials(name, email) {
     return (parts[0][0] + parts[1][0]).toUpperCase();
   }
   return source.slice(0, 2).toUpperCase();
+}
+
+function getExpiryWarningLabel(lastActiveAt) {
+  const ts = new Date(lastActiveAt || 0).getTime();
+  if (!ts) return null;
+  const remainingMs = ts + SEVEN_DAYS_MS - Date.now();
+  if (remainingMs <= 0 || remainingMs > TWO_DAYS_MS) return null;
+  const days = Math.max(1, Math.ceil(remainingMs / (24 * 60 * 60 * 1000)));
+  return days === 1 ? 'Expires in 1 day' : `Expires in ${days} days`;
 }
 
 function formatAuthError(error, fallbackAction = 'Check your details and try again.') {
@@ -34,7 +51,7 @@ function formatAuthError(error, fallbackAction = 'Check your details and try aga
     return "Your email address isn't verified yet. Open the confirmation link in your inbox, then sign in again.";
   }
   if (msg.includes('user already registered') || msg.includes('already exists')) {
-    return 'An account with this email already exists. Switch to Sign In or reset your password.';
+    return 'An account with this email already exists. Sign in or reset your password.';
   }
   if (msg.includes('rate limit') || msg.includes('too many requests')) {
     return 'Too many attempts in a short time. Wait a minute and try again.';
@@ -54,11 +71,15 @@ export function LoginForm({ initialMode = 'signin' }) {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [isGoogleLoading, setIsGoogleLoading] = useState(false);
 
-  // Soft logout & quick switch state
+  // Saved accounts on this device (most recent first, expandable up to 5)
   const [savedAccounts, setSavedAccounts] = useState([]);
+  const [showAllSaved, setShowAllSaved] = useState(false);
+  const [confirmRemoveId, setConfirmRemoveId] = useState(null);
   const [isSwitching, setIsSwitching] = useState(false);
   const [switchingUserId, setSwitchingUserId] = useState(null);
+
   const [sessionParam, setSessionParam] = useState(null);
   const [courtParam, setCourtParam] = useState(null);
   const [tvParam, setTvParam] = useState(null);
@@ -76,6 +97,7 @@ export function LoginForm({ initialMode = 'signin' }) {
 
   useEffect(() => {
     let isMounted = true;
+    let isRouting = false;
     const search = typeof window !== 'undefined' ? window.location.search : '';
     const params = new URLSearchParams(search);
     const scannedSession = params.get('session') || null;
@@ -86,6 +108,13 @@ export function LoginForm({ initialMode = 'signin' }) {
     setTvParam(scannedTv);
     setSavedAccounts(getValidSavedAccounts());
 
+    const handleStorage = (e) => {
+      if (!e.key || e.key === 'pikol_saved_accounts') {
+        setSavedAccounts(getValidSavedAccounts());
+      }
+    };
+    window.addEventListener('storage', handleStorage);
+
     let isTvReturn = false;
     if (typeof window !== 'undefined') {
       isTvReturn = window.sessionStorage.getItem(TV_RETURN_TO_ROLE_KEY) === '1';
@@ -94,16 +123,54 @@ export function LoginForm({ initialMode = 'signin' }) {
       }
     }
 
-    async function checkExistingSession() {
-      try {
-        const {
-          data: { session },
-        } = await supabase.auth.getSession();
+    async function handleActiveSession(session) {
+      if (!isMounted || !session?.user || isRouting) return;
+      if (isTvReturn && !scannedSession && !scannedCourt && !scannedTv) return;
+      isRouting = true;
 
-        if (!isMounted || !session?.user) return;
-        // If this tab just returned from TV Screen View after match end/abandon,
-        // keep it on /umpire for next TV pairing even if an account is signed in on this browser.
-        if (isTvReturn && !scannedSession && !scannedCourt && !scannedTv) return;
+      try {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('id, role, full_name, avatar_url')
+          .eq('id', session.user.id)
+          .maybeSingle();
+
+        if (!isMounted) return;
+
+        if (profile?.role === 'player') {
+          await supabase.auth.signOut();
+          isRouting = false;
+          setIsGoogleLoading(false);
+          setIsLoading(false);
+          setPasswordError(
+            'This account is registered as a player. Sign in through the player portal.'
+          );
+          return;
+        }
+
+        const defaultName =
+          profile?.full_name ||
+          session.user.user_metadata?.full_name ||
+          session.user.user_metadata?.name ||
+          session.user.email?.split('@')[0] ||
+          'Umpire';
+        const defaultAvatar =
+          profile?.avatar_url ||
+          session.user.user_metadata?.avatar_url ||
+          session.user.user_metadata?.picture ||
+          null;
+
+        await supabase
+          .from('profiles')
+          .update({
+            role: 'referee',
+            full_name: defaultName,
+            avatar_url: defaultAvatar,
+            last_active_at: new Date().toISOString(),
+          })
+          .eq('id', session.user.id);
+
+        removeSavedAccount(session.user.id);
         const dest = await resolveAuthenticatedDestination(
           supabase,
           session.user.id,
@@ -111,16 +178,35 @@ export function LoginForm({ initialMode = 'signin' }) {
         );
         if (isMounted) router.replace(dest);
       } catch (err) {
+        isRouting = false;
         console.error('Error checking existing umpire session:', err);
       }
     }
 
-    checkExistingSession();
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user) handleActiveSession(session);
+    });
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      if ((event === 'SIGNED_IN' || event === 'INITIAL_SESSION') && session?.user) {
+        handleActiveSession(session);
+      }
+    });
 
     return () => {
       isMounted = false;
+      window.removeEventListener('storage', handleStorage);
+      subscription?.unsubscribe();
     };
   }, [router]);
+
+  const p = new URLSearchParams();
+  if (courtParam) p.set('court', courtParam);
+  if (sessionParam) p.set('session', sessionParam);
+  if (tvParam) p.set('tv', tvParam);
+  const sessionSuffix = p.toString() ? `?${p.toString()}` : '';
 
   const clearFeedback = () => {
     setNameError('');
@@ -134,26 +220,39 @@ export function LoginForm({ initialMode = 'signin' }) {
     if (nextMode === mode) return;
     clearFeedback();
     setMode(nextMode);
-    if (nextMode === 'signin') {
-      setSavedAccounts(getValidSavedAccounts());
-    }
   };
 
-  // Quick Login Handler with Double-Tap Mutex & Server-Side Expiry Check
   const handleQuickLogin = async (account) => {
-    if (isSwitching) return; // Mutex prevents double-tap token revocation
+    if (isSwitching || isLoading || isGoogleLoading) return;
+    clearFeedback();
     setIsSwitching(true);
     setSwitchingUserId(account.userId);
-    clearFeedback();
 
-    const handleExpiredFallback = (acc) => {
+    const handleExpiredFallback = async (acc, customMessage) => {
       const updated = removeSavedAccount(acc.userId);
       setSavedAccounts(updated);
-      setEmail(acc.email);
+
+      if (acc.provider === 'google' && !customMessage) {
+        try {
+          await supabase.auth.signInWithOAuth({
+            provider: 'google',
+            options: {
+              redirectTo: `${window.location.origin}/umpire${sessionSuffix}`,
+              queryParams: acc.email ? { login_hint: acc.email } : undefined,
+            },
+          });
+          return;
+        } catch (err) {
+          console.error('Failed to redirect expired Google session to OAuth:', err);
+        }
+      }
+
       setIsSwitching(false);
       setSwitchingUserId(null);
+      setMode('signin');
+      setEmail(acc.email || '');
       setPasswordError(
-        'Session expired after 7 days. Please enter your password to continue.'
+        customMessage || 'Session expired after 7 days. Enter your password to continue.'
       );
       setTimeout(() => passwordInputRef.current?.focus(), 50);
     };
@@ -164,13 +263,11 @@ export function LoginForm({ initialMode = 'signin' }) {
       });
 
       if (error || !data?.session?.user) {
-        handleExpiredFallback(account);
+        await handleExpiredFallback(account);
         return;
       }
 
       const userId = data.session.user.id;
-
-      // Verify 7-day activity boundary and stamp fresh activity in 1 atomic round-trip
       const cutoffIso = new Date(Date.now() - SEVEN_DAYS_MS).toISOString();
       const { data: updatedProfile, error: profileErr } = await supabase
         .from('profiles')
@@ -181,22 +278,22 @@ export function LoginForm({ initialMode = 'signin' }) {
         .maybeSingle();
 
       if (profileErr || !updatedProfile) {
-        // Officially terminate the stale session via Supabase Auth API
         await supabase.auth.signOut();
-        handleExpiredFallback(account);
+        await handleExpiredFallback(account);
         return;
       }
 
       if (updatedProfile.role === 'player') {
         await supabase.auth.signOut();
-        handleExpiredFallback(account);
-        setPasswordError(
-          'This account is registered as a Player. Please sign in through the Player Portal.'
+        await handleExpiredFallback(
+          account,
+          'This account is registered as a player. Sign in through the player portal.'
         );
         return;
       }
 
-      removeSavedAccount(account.userId);
+      const nextSaved = removeSavedAccount(account.userId);
+      setSavedAccounts(nextSaved);
       const dest = await resolveAuthenticatedDestination(
         supabase,
         userId,
@@ -205,16 +302,13 @@ export function LoginForm({ initialMode = 'signin' }) {
       router.replace(dest);
     } catch (err) {
       console.error('Quick login failed:', err);
-      handleExpiredFallback(account);
+      await handleExpiredFallback(account);
     }
   };
 
-  // Manual Account Removal ("x" Hard Logout)
-  const handleRemoveSavedAccount = async (e, account) => {
-    e.stopPropagation();
+  const handleConfirmRemoveSavedAccount = async (account) => {
     if (isSwitching) return;
-
-    // Optimistic removal from UI and localStorage
+    setConfirmRemoveId(null);
     const updated = removeSavedAccount(account.userId);
     setSavedAccounts(updated);
 
@@ -231,17 +325,38 @@ export function LoginForm({ initialMode = 'signin' }) {
     }
   };
 
+  const handleGoogleSignIn = async () => {
+    if (isLoading || isGoogleLoading || isSwitching) return;
+    clearFeedback();
+    setIsGoogleLoading(true);
+    try {
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: `${window.location.origin}/umpire${sessionSuffix}`,
+        },
+      });
+      if (error) {
+        setPasswordError(formatAuthError(error));
+        setIsGoogleLoading(false);
+      }
+    } catch (err) {
+      setPasswordError(formatAuthError(err, 'Failed to initiate Google sign-in.'));
+      setIsGoogleLoading(false);
+    }
+  };
+
   const handleForgotPassword = async (e) => {
     e.preventDefault();
     clearFeedback();
 
     const trimmedEmail = email.trim();
     if (!trimmedEmail) {
-      setEmailError('Enter your email address first, then select Forgot password? to receive a reset link.');
+      setEmailError('Enter your email address first, then select Forgot password?.');
       return;
     }
     if (!EMAIL_RE.test(trimmedEmail)) {
-      setEmailError('That email address is incomplete. Enter a valid address like you@email.com.');
+      setEmailError('Enter a valid email address like you@email.com.');
       return;
     }
 
@@ -250,16 +365,12 @@ export function LoginForm({ initialMode = 'signin' }) {
         redirectTo: `${window.location.origin}/umpire`,
       });
       if (error) {
-        setEmailError(
-          formatAuthError(error, 'Verify the email address on your account and try again.')
-        );
+        setEmailError(formatAuthError(error));
         return;
       }
-      setStatusMessage(`Password reset link sent to ${trimmedEmail}. Check your inbox to set a new password.`);
+      setStatusMessage(`Password reset link sent to ${trimmedEmail}.`);
     } catch (err) {
-      setEmailError(
-        formatAuthError(err, 'Check your internet connection and try again.')
-      );
+      setEmailError(formatAuthError(err));
     }
   };
 
@@ -272,36 +383,36 @@ export function LoginForm({ initialMode = 'signin' }) {
     let hasError = false;
 
     if (isSignUp && !trimmedName) {
-      setNameError('Name is required. Enter your official or player name.');
+      setNameError('Enter your official name.');
       hasError = true;
     }
 
     if (!trimmedEmail) {
-      setEmailError('Email is required. Enter the email address for your account.');
+      setEmailError('Enter the email address for your account.');
       hasError = true;
     } else if (!EMAIL_RE.test(trimmedEmail)) {
-      setEmailError('That email address is incomplete. Enter a valid address like you@email.com.');
+      setEmailError('Enter a valid email address like you@email.com.');
       hasError = true;
     }
 
     if (!password) {
       setPasswordError(
         isSignUp
-          ? 'Password is required. Enter at least 6 characters.'
-          : 'Password is required. Enter your password or select Forgot password? to reset it.'
+          ? 'Enter a password of at least 6 characters.'
+          : 'Enter your password or select Forgot password? to reset it.'
       );
       hasError = true;
     } else if (isSignUp && password.length < 6) {
-      setPasswordError('Password is too short. Use at least 6 characters.');
+      setPasswordError('Use at least 6 characters for your password.');
       hasError = true;
     }
 
     if (isSignUp) {
       if (!confirmPassword) {
-        setConfirmPasswordError('Confirm your password by re-entering it above.');
+        setConfirmPasswordError('Re-enter your password to confirm.');
         hasError = true;
       } else if (password && confirmPassword !== password) {
-        setConfirmPasswordError("Passwords don't match. Make sure both password fields are identical.");
+        setConfirmPasswordError("Passwords don't match.");
         hasError = true;
       }
     }
@@ -360,7 +471,7 @@ export function LoginForm({ initialMode = 'signin' }) {
         setMode('signin');
         setPassword('');
         setConfirmPassword('');
-        setStatusMessage('Account created! Check your email if confirmation is required, then sign in.');
+        setStatusMessage('Account created. Check your email if confirmation is required, then sign in.');
         return;
       }
 
@@ -376,7 +487,6 @@ export function LoginForm({ initialMode = 'signin' }) {
       }
 
       if (data?.session?.user) {
-        // Enforce role isolation: player accounts cannot sign into umpire console
         const { data: profile } = await supabase
           .from('profiles')
           .select('role')
@@ -386,7 +496,7 @@ export function LoginForm({ initialMode = 'signin' }) {
         if (profile?.role === 'player') {
           await supabase.auth.signOut();
           setPasswordError(
-            'This account is registered as a Player. Please sign in through the Player Portal.'
+            'This account is registered as a player. Sign in through the player portal.'
           );
           setIsLoading(false);
           return;
@@ -412,26 +522,24 @@ export function LoginForm({ initialMode = 'signin' }) {
 
       router.replace('/matches');
     } catch (err) {
-      setPasswordError(
-        formatAuthError(err, 'Check your internet connection and try again.')
-      );
+      setPasswordError(formatAuthError(err));
       setIsLoading(false);
     }
   };
 
-  const p = new URLSearchParams();
-  if (courtParam) p.set('court', courtParam);
-  if (sessionParam) p.set('session', sessionParam);
-  if (tvParam) p.set('tv', tvParam);
-  const sessionSuffix = p.toString() ? `?${p.toString()}` : '';
+  const visibleSavedAccounts = showAllSaved
+    ? savedAccounts.slice(0, 5)
+    : savedAccounts.slice(0, 1);
+  const hiddenSavedCount = Math.max(0, Math.min(5, savedAccounts.length) - 1);
 
   return (
-    <section className="relative flex flex-col items-center bg-pale-sage px-8 pt-10 pb-10">
-      <div className="mb-6 flex items-center justify-between w-full max-w-[440px]">
+    <section className="bg-[#EAF0E5] px-6 sm:px-12 py-10 flex flex-col">
+      {/* Logo only at top */}
+      <div className="mb-8">
         <Link
           href={`/umpire${sessionSuffix}`}
-          aria-label="PikolScore Umpire Console"
-          className="flex items-center gap-2.5 sm:gap-3 text-[22px] sm:text-[26px] font-bold tracking-[-0.01em] text-dark-teal no-underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal"
+          aria-label="PikolScore"
+          className="inline-flex items-center gap-3 text-2xl font-bold tracking-tight text-[#084B46] no-underline rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0F5C62]/40"
         >
           <svg width="40" height="40" viewBox="0 0 40 40" aria-hidden="true" className="shrink-0">
             <rect width="40" height="40" rx="12" fill="#0F5C62" />
@@ -442,379 +550,328 @@ export function LoginForm({ initialMode = 'signin' }) {
           </svg>
           <span>{AUTH_CONTENT.brand}</span>
         </Link>
-        <div className="flex items-center gap-2.5 shrink-0">
-          <span className="whitespace-nowrap rounded-full bg-teal/10 px-3 py-1 text-[12px] font-semibold text-dark-teal border border-teal/20">
-            Umpire Console
-          </span>
-        </div>
       </div>
 
+      {/* Form column */}
       <form
         action="#"
         noValidate
         onSubmit={handleSubmit}
-        className="my-auto flex w-full max-w-[400px] flex-col py-4"
+        className="mx-auto my-auto w-full max-w-[400px] flex flex-col gap-5"
       >
-        <div
-          role="tablist"
-          aria-label="Authentication mode"
-          className="mb-6 grid h-11 grid-cols-2 gap-1 rounded-full bg-off-white border-[1.5px] border-line p-1"
-        >
-          <button
-            type="button"
-            role="tab"
-            aria-selected={!isSignUp}
-            onClick={() => switchMode('signin')}
-            disabled={isLoading || isSwitching}
-            className={`flex items-center justify-center rounded-full border-0 text-[15px] font-semibold transition-colors cursor-pointer disabled:cursor-default focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-dark-teal ${
-              !isSignUp ? 'bg-teal text-off-white' : 'bg-transparent text-deep-green hover:bg-pale-sage'
-            }`}
-          >
-            {AUTH_CONTENT.tabs.signIn}
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={isSignUp}
-            onClick={() => switchMode('signup')}
-            disabled={isLoading || isSwitching}
-            className={`flex items-center justify-center rounded-full border-0 text-[15px] font-semibold transition-colors cursor-pointer disabled:cursor-default focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-dark-teal ${
-              isSignUp ? 'bg-teal text-off-white' : 'bg-transparent text-deep-green hover:bg-pale-sage'
-            }`}
-          >
-            {AUTH_CONTENT.tabs.signUp}
-          </button>
-        </div>
-
-        <h1 className="m-0 text-center text-[40px] leading-[48px] font-bold tracking-[-0.02em] text-dark-teal">
+        <h1 className="m-0 text-4xl leading-10 font-semibold tracking-tight text-[#084B46]">
           {copy.heading}
         </h1>
-        <p className="mt-2 mb-6 text-center text-[16px] leading-[24px] text-deep-green">
-          {copy.subtitle}
-        </p>
 
-        <div className="flex flex-col gap-4">
-          {isSignUp && (
-            <div className="flex flex-col gap-2">
-              <label htmlFor="full-name" className="text-[14px] font-semibold text-dark-teal">
-                {fields.fullName.label} <span className="text-teal" aria-hidden="true">*</span>
-              </label>
-              <div className="flex h-[52px] items-center gap-3 rounded-full bg-off-white border-[1.5px] border-line px-5 focus-within:border-teal focus-within:ring-2 focus-within:ring-teal">
-                <svg
-                  className="shrink-0"
-                  width="20"
-                  height="20"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="#084B46"
-                  strokeWidth="1.8"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  aria-hidden="true"
-                >
-                  <circle cx="12" cy="8" r="4" />
-                  <path d="M4 20c1.8-3.6 5-5.5 8-5.5s6.2 1.9 8 5.5" />
-                </svg>
-                <input
-                  id="full-name"
-                  name="fullName"
-                  type="text"
-                  autoComplete="name"
-                  placeholder={fields.fullName.placeholder}
-                  required
-                  value={fullName}
-                  onChange={(e) => {
-                    setFullName(e.target.value);
-                    if (nameError) setNameError('');
-                  }}
-                  aria-invalid={Boolean(nameError)}
-                  aria-describedby={nameError ? 'name-error' : undefined}
-                  className="min-w-0 flex-1 border-0 bg-transparent text-[16px] font-medium text-dark-teal placeholder:text-muted outline-none"
-                />
-              </div>
-              {nameError && (
-                <p id="name-error" role="alert" className="m-0 text-sm text-error">
-                  {nameError}
-                </p>
-              )}
-            </div>
-          )}
-
+        {/* Saved-account row (hidden when none; most recent shown, "+N more" expands up to 5) */}
+        {!isSignUp && savedAccounts.length > 0 && (
           <div className="flex flex-col gap-2">
-            <label htmlFor="email" className="text-[14px] font-semibold text-dark-teal">
-              {fields.email.label} <span className="text-teal" aria-hidden="true">*</span>
-            </label>
-            <div className="flex h-[52px] items-center gap-3 rounded-full bg-off-white border-[1.5px] border-line px-5 focus-within:border-teal focus-within:ring-2 focus-within:ring-teal">
-              <svg
-                className="shrink-0"
-                width="20"
-                height="20"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="#084B46"
-                strokeWidth="1.8"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                aria-hidden="true"
-              >
-                <rect x="3" y="5" width="18" height="14" rx="3" />
-                <path d="m4 7 8 6 8-6" />
-              </svg>
-              <input
-                id="email"
-                name="email"
-                type="email"
-                autoComplete="email"
-                placeholder={fields.email.placeholder}
-                required
-                value={email}
-                onChange={(e) => {
-                  setEmail(e.target.value);
-                  if (emailError) setEmailError('');
-                  if (statusMessage) setStatusMessage('');
-                }}
-                aria-invalid={Boolean(emailError)}
-                aria-describedby={emailError ? 'email-error' : undefined}
-                className="min-w-0 flex-1 border-0 bg-transparent text-[16px] font-medium text-dark-teal placeholder:text-muted outline-none"
-              />
-            </div>
-            {emailError && (
-              <p id="email-error" role="alert" className="m-0 text-sm text-error">
-                {emailError}
-              </p>
-            )}
-          </div>
+            {visibleSavedAccounts.map((account) => {
+              const isConfirming = confirmRemoveId === account.userId;
+              const isThisSwitching = isSwitching && switchingUserId === account.userId;
+              const expiryLabel = getExpiryWarningLabel(account.lastActiveAt);
+              const displayName = account.fullName || account.email?.split('@')[0] || 'Umpire';
 
-          <div className="flex flex-col gap-2">
-            <div className="flex items-baseline justify-between">
-              <label htmlFor="password" className="text-[14px] font-semibold text-dark-teal">
-                {fields.password.label} <span className="text-teal" aria-hidden="true">*</span>
-              </label>
-              {!isSignUp && (
-                <a
-                  href="#forgot"
-                  onClick={handleForgotPassword}
-                  className="text-[14px] font-semibold text-teal no-underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal"
+              if (isConfirming) {
+                return (
+                  <div
+                    key={account.userId}
+                    className="flex items-center justify-between gap-3 rounded-2xl bg-[#FAF9F5] p-3 min-h-14"
+                  >
+                    <span className="text-sm font-medium text-[#203F39]">
+                      Remove {displayName} from this device?
+                    </span>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => setConfirmRemoveId(null)}
+                        className="h-9 px-3 rounded-full bg-[#EAF0E5] text-sm font-medium text-[#203F39] hover:bg-[#E2E5DC] cursor-pointer border-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0F5C62]/40"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleConfirmRemoveSavedAccount(account)}
+                        className="h-9 px-3 rounded-full bg-[#B3412F] text-sm font-medium text-white hover:opacity-90 cursor-pointer border-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0F5C62]/40"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  </div>
+                );
+              }
+
+              return (
+                <div
+                  key={account.userId}
+                  className="flex items-center gap-3 rounded-2xl bg-[#FAF9F5] hover:bg-[#FEFEFB] p-3 min-h-14 transition-colors"
                 >
-                  {AUTH_CONTENT.signIn.forgotPassword}
-                </a>
-              )}
-            </div>
-            <div className="flex h-[52px] items-center gap-3 rounded-full bg-off-white border-[1.5px] border-line px-5 focus-within:border-teal focus-within:ring-2 focus-within:ring-teal">
-              <svg
-                className="shrink-0"
-                width="20"
-                height="20"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="#084B46"
-                strokeWidth="1.8"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                aria-hidden="true"
-              >
-                <rect x="5" y="11" width="14" height="9" rx="2.5" />
-                <path d="M8 11V8a4 4 0 0 1 8 0v3" />
-              </svg>
-              <input
-                ref={passwordInputRef}
-                id="password"
-                name="password"
-                type={showPassword ? 'text' : 'password'}
-                autoComplete={isSignUp ? 'new-password' : 'current-password'}
-                placeholder={
-                  isSignUp ? fields.password.signUpPlaceholder : fields.password.signInPlaceholder
-                }
-                required
-                value={password}
-                onChange={(e) => {
-                  setPassword(e.target.value);
-                  if (passwordError) setPasswordError('');
-                }}
-                aria-invalid={Boolean(passwordError)}
-                aria-describedby={passwordError ? 'password-error' : undefined}
-                className="min-w-0 flex-1 border-0 bg-transparent text-[16px] font-medium text-dark-teal placeholder:text-muted outline-none"
-              />
+                  <button
+                    type="button"
+                    disabled={isSwitching || isLoading || isGoogleLoading}
+                    onClick={() => handleQuickLogin(account)}
+                    className="flex flex-1 items-center gap-3 min-w-0 text-left bg-transparent border-0 p-0 cursor-pointer disabled:cursor-not-allowed rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0F5C62]/40"
+                  >
+                    <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-[#FEECD6] text-sm font-semibold text-[#084B46] overflow-hidden">
+                      {account.avatarUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={account.avatarUrl}
+                          alt=""
+                          className="h-full w-full object-cover"
+                          referrerPolicy="no-referrer"
+                        />
+                      ) : (
+                        getInitials(account.fullName, account.email)
+                      )}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="truncate text-base font-medium text-[#203F39]">
+                          {displayName}
+                        </span>
+                        {expiryLabel && (
+                          <span className="shrink-0 rounded-full bg-[#FEECD6] px-2 py-0.5 text-xs font-medium text-[#084B46]">
+                            {expiryLabel}
+                          </span>
+                        )}
+                      </div>
+                      <div className="truncate text-sm text-[#5F6B65]">
+                        {isThisSwitching ? 'Signing in…' : maskEmail(account.email)}
+                      </div>
+                    </div>
+                    {isThisSwitching ? (
+                      <Loader2 size={18} className="shrink-0 animate-spin text-[#0F5C62]" />
+                    ) : (
+                      <ChevronRight size={18} className="shrink-0 text-[#5F6B65]" aria-hidden="true" />
+                    )}
+                  </button>
+
+                  <button
+                    type="button"
+                    disabled={isSwitching}
+                    onClick={() => setConfirmRemoveId(account.userId)}
+                    aria-label="Remove from this device"
+                    className="size-11 shrink-0 grid place-items-center rounded-full bg-transparent text-[#5F6B65] hover:bg-[#EAF0E5] hover:text-[#203F39] border-0 cursor-pointer transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0F5C62]/40"
+                  >
+                    <X size={16} aria-hidden="true" />
+                  </button>
+                </div>
+              );
+            })}
+
+            {!showAllSaved && hiddenSavedCount > 0 && (
               <button
                 type="button"
-                aria-label={showPassword ? 'Hide password' : 'Show password'}
-                aria-pressed={showPassword}
-                onClick={() => setShowPassword((prev) => !prev)}
-                className="flex border-0 bg-transparent p-0 cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal"
+                onClick={() => setShowAllSaved(true)}
+                className="self-start text-sm font-medium text-[#0F5C62] bg-transparent border-0 px-1 py-0.5 cursor-pointer hover:underline underline-offset-4 rounded focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0F5C62]/40"
               >
-                <svg
-                  className="shrink-0"
-                  width="20"
-                  height="20"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="#084B46"
-                  strokeWidth="1.8"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  aria-hidden="true"
-                >
-                  <path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z" />
-                  <circle cx="12" cy="12" r="3" />
-                </svg>
+                +{hiddenSavedCount} more
               </button>
-            </div>
-            {passwordError && (
-              <p id="password-error" role="alert" className="m-0 text-sm text-error">
-                {passwordError}
+            )}
+          </div>
+        )}
+
+        {/* Sign-up Name Field */}
+        {isSignUp && (
+          <div className="flex flex-col gap-1.5">
+            <label htmlFor="full-name" className="text-sm font-medium text-[#203F39]">
+              {fields.fullName.label}
+            </label>
+            <input
+              id="full-name"
+              name="fullName"
+              type="text"
+              autoComplete="name"
+              placeholder={fields.fullName.placeholder}
+              required
+              value={fullName}
+              onChange={(e) => {
+                setFullName(e.target.value);
+                if (nameError) setNameError('');
+              }}
+              aria-invalid={Boolean(nameError)}
+              aria-describedby={nameError ? 'name-error' : undefined}
+              className="h-12 w-full rounded-full bg-[#FAF9F5] border-0 px-5 text-base text-[#203F39] placeholder:text-[#5F6B65] focus:outline-none focus:ring-2 focus:ring-[#0F5C62]/40"
+            />
+            {nameError && (
+              <p id="name-error" role="alert" className="m-0 text-sm text-[#B3412F]">
+                {nameError}
               </p>
             )}
           </div>
+        )}
 
-          {isSignUp && (
-            <div className="flex flex-col gap-2">
-              <label htmlFor="confirm-password" className="text-[14px] font-semibold text-dark-teal">
-                {fields.confirmPassword.label} <span className="text-teal" aria-hidden="true">*</span>
-              </label>
-              <div className="flex h-[52px] items-center gap-3 rounded-full bg-off-white border-[1.5px] border-line px-5 focus-within:border-teal focus-within:ring-2 focus-within:ring-teal">
-                <svg
-                  className="shrink-0"
-                  width="20"
-                  height="20"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="#084B46"
-                  strokeWidth="1.8"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  aria-hidden="true"
-                >
-                  <rect x="5" y="11" width="14" height="9" rx="2.5" />
-                  <path d="M8 11V8a4 4 0 0 1 8 0v3" />
-                </svg>
-                <input
-                  id="confirm-password"
-                  name="confirmPassword"
-                  type={showPassword ? 'text' : 'password'}
-                  autoComplete="new-password"
-                  placeholder={fields.confirmPassword.placeholder}
-                  required
-                  value={confirmPassword}
-                  onChange={(e) => {
-                    setConfirmPassword(e.target.value);
-                    if (confirmPasswordError) setConfirmPasswordError('');
-                  }}
-                  aria-invalid={Boolean(confirmPasswordError)}
-                  aria-describedby={confirmPasswordError ? 'confirm-password-error' : undefined}
-                  className="min-w-0 flex-1 border-0 bg-transparent text-[16px] font-medium text-dark-teal placeholder:text-muted outline-none"
-                />
-              </div>
-              {confirmPasswordError && (
-                <p id="confirm-password-error" role="alert" className="m-0 text-sm text-error">
-                  {confirmPasswordError}
-                </p>
-              )}
-            </div>
+        {/* Email Field */}
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor="email" className="text-sm font-medium text-[#203F39]">
+            {fields.email.label}
+          </label>
+          <input
+            id="email"
+            name="email"
+            type="email"
+            autoComplete="email"
+            placeholder={fields.email.placeholder}
+            required
+            value={email}
+            onChange={(e) => {
+              setEmail(e.target.value);
+              if (emailError) setEmailError('');
+              if (statusMessage) setStatusMessage('');
+            }}
+            aria-invalid={Boolean(emailError)}
+            aria-describedby={emailError ? 'email-error' : undefined}
+            className="h-12 w-full rounded-full bg-[#FAF9F5] border-0 px-5 text-base text-[#203F39] placeholder:text-[#5F6B65] focus:outline-none focus:ring-2 focus:ring-[#0F5C62]/40"
+          />
+          {emailError && (
+            <p id="email-error" role="alert" className="m-0 text-sm text-[#B3412F]">
+              {emailError}
+            </p>
           )}
         </div>
 
+        {/* Password Field */}
+        <div className="flex flex-col gap-1.5">
+          <div className="flex items-baseline justify-between">
+            <label htmlFor="password" className="text-sm font-medium text-[#203F39]">
+              {fields.password.label}
+            </label>
+            {!isSignUp && (
+              <a
+                href="#forgot"
+                onClick={handleForgotPassword}
+                className="text-sm font-medium text-[#0F5C62] no-underline hover:underline underline-offset-4 rounded focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0F5C62]/40"
+              >
+                {AUTH_CONTENT.signIn.forgotPassword}
+              </a>
+            )}
+          </div>
+          <div className="relative flex items-center">
+            <input
+              ref={passwordInputRef}
+              id="password"
+              name="password"
+              type={showPassword ? 'text' : 'password'}
+              autoComplete={isSignUp ? 'new-password' : 'current-password'}
+              placeholder={
+                isSignUp ? fields.password.signUpPlaceholder : fields.password.signInPlaceholder
+              }
+              required
+              value={password}
+              onChange={(e) => {
+                setPassword(e.target.value);
+                if (passwordError) setPasswordError('');
+              }}
+              aria-invalid={Boolean(passwordError)}
+              aria-describedby={passwordError ? 'password-error' : undefined}
+              className="h-12 w-full rounded-full bg-[#FAF9F5] border-0 pl-5 pr-12 text-base text-[#203F39] placeholder:text-[#5F6B65] focus:outline-none focus:ring-2 focus:ring-[#0F5C62]/40"
+            />
+            <button
+              type="button"
+              aria-label={showPassword ? 'Hide password' : 'Show password'}
+              aria-pressed={showPassword}
+              onClick={() => setShowPassword((prev) => !prev)}
+              className="absolute right-1 size-11 grid place-items-center rounded-full border-0 bg-transparent text-[#5F6B65] hover:text-[#203F39] cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0F5C62]/40"
+            >
+              {showPassword ? <EyeOff size={18} aria-hidden="true" /> : <Eye size={18} aria-hidden="true" />}
+            </button>
+          </div>
+          {passwordError && (
+            <p id="password-error" role="alert" className="m-0 text-sm text-[#B3412F]">
+              {passwordError}
+            </p>
+          )}
+        </div>
+
+        {/* Sign-up Confirm Password Field */}
+        {isSignUp && (
+          <div className="flex flex-col gap-1.5">
+            <label htmlFor="confirm-password" className="text-sm font-medium text-[#203F39]">
+              {fields.confirmPassword.label}
+            </label>
+            <input
+              id="confirm-password"
+              name="confirmPassword"
+              type={showPassword ? 'text' : 'password'}
+              autoComplete="new-password"
+              placeholder={fields.confirmPassword.placeholder}
+              required
+              value={confirmPassword}
+              onChange={(e) => {
+                setConfirmPassword(e.target.value);
+                if (confirmPasswordError) setConfirmPasswordError('');
+              }}
+              aria-invalid={Boolean(confirmPasswordError)}
+              aria-describedby={confirmPasswordError ? 'confirm-password-error' : undefined}
+              className="h-12 w-full rounded-full bg-[#FAF9F5] border-0 px-5 text-base text-[#203F39] placeholder:text-[#5F6B65] focus:outline-none focus:ring-2 focus:ring-[#0F5C62]/40"
+            />
+            {confirmPasswordError && (
+              <p id="confirm-password-error" role="alert" className="m-0 text-sm text-[#B3412F]">
+                {confirmPasswordError}
+              </p>
+            )}
+          </div>
+        )}
+
         {statusMessage && (
-          <p role="status" className="mt-4 text-center text-[15px] text-deep-green">
+          <p role="status" className="m-0 text-sm text-[#084B46]">
             {statusMessage}
           </p>
         )}
 
+        {/* Primary Sign in Button */}
         <button
           type="submit"
-          disabled={isLoading || isSwitching}
-          className="mt-6 flex h-[56px] items-center justify-center gap-3 rounded-full border-0 bg-teal text-[17px] font-semibold text-cream shadow-[0_10px_24px_-10px_rgba(15,92,98,0.5)] transition-colors hover:bg-forest-teal active:translate-y-[2px] cursor-pointer disabled:cursor-default focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal"
+          disabled={isLoading || isGoogleLoading || isSwitching}
+          className="h-12 w-full rounded-full border-0 bg-[#0F5C62] font-medium text-base text-white hover:bg-[#084B46] transition-colors flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0F5C62]/40"
         >
-          {isLoading ? copy.submitting : copy.submit}
+          {isLoading && <Loader2 size={18} className="animate-spin" aria-hidden="true" />}
+          <span>{isLoading ? copy.submitting : copy.submit}</span>
         </button>
 
-        {/* Lower Panel: Account Chooser + Guest Action (Sign In mode) */}
-        {!isSignUp && (
-          <div className="mt-8 flex flex-col gap-4">
-            {savedAccounts.length > 0 && (
-              <>
-                <div className="relative flex items-center justify-center">
-                  <div className="absolute inset-0 flex items-center" aria-hidden="true">
-                    <div className="w-full border-t border-line" />
-                  </div>
-                  <span className="relative bg-pale-sage px-3 text-[12px] font-semibold uppercase tracking-[0.06em] text-muted">
-                    Or Quick Switch
-                  </span>
-                </div>
+        {/* Hairline divider with "or" */}
+        <div className="flex items-center gap-3" aria-hidden="true">
+          <div className="h-px flex-1 bg-[#E2E5DC]" />
+          <span className="text-sm text-[#5F6B65]">or</span>
+          <div className="h-px flex-1 bg-[#E2E5DC]" />
+        </div>
 
-                <div className="flex flex-col gap-2">
-                  <p className="m-0 text-[13px] font-semibold text-deep-green">
-                    Saved accounts on this device (up to 5):
-                  </p>
-                  <div className="flex flex-col gap-2">
-                    {savedAccounts.map((account) => {
-                      const isThisSwitching = isSwitching && switchingUserId === account.userId;
-                      return (
-                        <div
-                          key={account.userId}
-                          role="button"
-                          tabIndex={isSwitching ? -1 : 0}
-                          onClick={() => !isSwitching && handleQuickLogin(account)}
-                          onKeyDown={(e) => {
-                            if ((e.key === 'Enter' || e.key === ' ') && !isSwitching) {
-                              e.preventDefault();
-                              handleQuickLogin(account);
-                            }
-                          }}
-                          aria-disabled={isSwitching}
-                          aria-label={`Switch to account ${account.fullName || account.email}`}
-                          className={`group relative flex items-center justify-between gap-3 rounded-2xl bg-off-white border-[1.5px] border-line p-3 transition-colors text-left ${
-                            isSwitching
-                              ? 'opacity-60 cursor-not-allowed'
-                              : 'cursor-pointer hover:bg-pale-sage hover:border-teal/30 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal'
-                          }`}
-                        >
-                          <div className="flex items-center gap-3 min-w-0">
-                            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-teal text-[14px] font-bold text-cream">
-                              {getInitials(account.fullName, account.email)}
-                            </div>
-                            <div className="min-w-0 flex-1">
-                              <p className="m-0 truncate text-[15px] font-semibold text-dark-teal">
-                                {account.fullName}
-                              </p>
-                              <p className="m-0 truncate text-[13px] text-muted">
-                                {account.email}
-                              </p>
-                              <p className="m-0 text-[12px] font-medium text-teal">
-                                {isThisSwitching ? 'Switching...' : 'Tap to continue'}
-                              </p>
-                            </div>
-                          </div>
+        {/* Continue with Google */}
+        <button
+          type="button"
+          onClick={handleGoogleSignIn}
+          disabled={isLoading || isGoogleLoading || isSwitching}
+          className="h-12 w-full rounded-full border-0 bg-[#FEFEFB] text-base font-medium text-[#203F39] hover:bg-white transition-colors flex items-center justify-center gap-3 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0F5C62]/40"
+        >
+          {isGoogleLoading ? (
+            <Loader2 size={18} className="animate-spin text-[#0F5C62]" aria-hidden="true" />
+          ) : (
+            <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
+              <path
+                d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+                fill="#4285F4"
+              />
+              <path
+                d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+                fill="#34A853"
+              />
+              <path
+                d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
+                fill="#FBBC05"
+              />
+              <path
+                d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
+                fill="#EA4335"
+              />
+            </svg>
+          )}
+          <span>{isGoogleLoading ? 'Connecting to Google…' : 'Continue with Google'}</span>
+        </button>
 
-                          <button
-                            type="button"
-                            disabled={isSwitching}
-                            onClick={(e) => handleRemoveSavedAccount(e, account)}
-                            aria-label={`Remove saved account for ${account.fullName || account.email}`}
-                            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border-0 bg-transparent text-muted hover:bg-line/40 hover:text-error transition-colors cursor-pointer disabled:cursor-not-allowed focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal"
-                          >
-                            <X size={16} aria-hidden="true" />
-                          </button>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              </>
-            )}
 
-            <button
-              type="button"
-              onClick={() => router.push('/pikolscore?demo=1')}
-              disabled={isSwitching || isLoading}
-              className="flex h-[48px] w-full items-center justify-center gap-2 rounded-full bg-off-white border-[1.5px] border-line text-[15px] font-semibold text-dark-teal transition-colors hover:bg-pale-sage hover:border-teal/30 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal"
-            >
-              <Eye size={18} className="text-teal" aria-hidden="true" />
-              <span>View Courtside as Guest</span>
-            </button>
-          </div>
-        )}
-
-        <p className="mt-6 text-center text-[15px] text-deep-green">
+        {/* Footer */}
+        <p className="m-0 text-center text-sm text-[#5F6B65]">
           {copy.footerPrompt}
           <Link
             href="/umpire"
@@ -822,7 +879,7 @@ export function LoginForm({ initialMode = 'signin' }) {
               e.preventDefault();
               switchMode(isSignUp ? 'signin' : 'signup');
             }}
-            className="font-semibold text-teal no-underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal"
+            className="font-semibold text-[#0F5C62] no-underline underline-offset-4 hover:underline rounded focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0F5C62]/40"
           >
             {copy.footerLink}
           </Link>
