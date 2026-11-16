@@ -1,20 +1,28 @@
-import { Outfit } from 'next/font/google';
+import { Barlow_Condensed, Plus_Jakarta_Sans } from 'next/font/google';
 import './globals.css';
 
-const outfit = Outfit({
+const barlowCondensed = Barlow_Condensed({
   subsets: ['latin'],
-  weight: ['400', '500', '600', '700', '800', '900'],
-  variable: '--font-outfit',
+  weight: ['700', '800'],
+  style: ['normal', 'italic'],
+  variable: '--font-display',
+  display: 'swap',
+});
+
+const plusJakartaSans = Plus_Jakarta_Sans({
+  subsets: ['latin'],
+  weight: ['400', '500', '600', '700', '800'],
+  variable: '--font-sans',
   display: 'swap',
 });
 
 export const metadata = {
-  title: 'PikolScore | Courtside Precision',
-  description: 'Tactile Pickleball Match Tracker and Scoreboard for Tablet and Mobile Landscape',
+  title: 'DinkVision | Courtside Precision Scoreboard',
+  description: 'Athletic dark-mode pickleball match officiating console, court hub, and TV display',
 };
 
 export const viewport = {
-  themeColor: '#203F39',
+  themeColor: '#021024',
   width: 'device-width',
   initialScale: 1,
   maximumScale: 1,
@@ -24,8 +32,11 @@ export const viewport = {
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="en" className={outfit.variable}>
-      <body className={outfit.className}>{children}</body>
+    <html
+      lang="en"
+      className={`${barlowCondensed.variable} ${plusJakartaSans.variable}`}
+    >
+      <body className={plusJakartaSans.className}>{children}</body>
     </html>
   );
 }

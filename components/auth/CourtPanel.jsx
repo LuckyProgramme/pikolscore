@@ -13,6 +13,7 @@ import {
   normalizeTvId,
 } from '@/lib/tv-pairing';
 import { getSynth } from '@/lib/audio';
+import AmbientCourtMotif from '@/components/ui/AmbientCourtMotif';
 
 function getCourtNumber(row) {
   return Number(row?.court_number || row?.player_names?.courtNumber) || null;
@@ -62,8 +63,8 @@ export function CourtPanel() {
         type: 'svg',
         margin: 0,
         color: {
-          dark: '#084B46',
-          light: '#FEFEFB',
+          dark: '#021024',
+          light: '#FFFFFF',
         },
       },
       (err, svg) => {
@@ -163,38 +164,23 @@ export function CourtPanel() {
 
   return (
     <aside
-      className="hidden lg:flex flex-col bg-[#203F39] p-10 text-[#FAF9F5] relative overflow-hidden"
+      className="hidden lg:flex flex-col items-center justify-center bg-[#07192B] border-l border-[#11263C] p-10 text-[#FFFFFF] relative overflow-hidden"
       aria-label="Courtside TV pairing"
     >
-      {/* Faint court illustration away from text */}
-      <svg
-        xmlns="http://www.w3.org/2000/svg"
-        viewBox="0 45 572 340"
-        aria-hidden="true"
-        className="pointer-events-none absolute -right-24 -top-10 w-[460px] max-w-none h-auto opacity-[0.08]"
-      >
-        <g>
-          <polygon points="15,238 262,58 540,203 290,383" fill="#c3d0c6" transform="translate(0, 12)" />
-          <polygon points="15,238 262,58 540,203 290,383" fill="#8A9B82" />
-          <polygon points="55,232 265,80 500,203 290,357" fill="#26705f" />
-          <polygon points="155,160 395,280 385,285 145,165" fill="#5a9985" />
-          <g stroke="#f1e8cf" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-            <polygon points="55,232 265,80 500,203 290,357" fill="none" />
-            <line x1="197" y1="129" x2="432" y2="253" />
-            <line x1="123" y1="183" x2="358" y2="307" />
-            <line x1="314.5" y1="191" x2="382.5" y2="141.5" />
-            <line x1="240.5" y1="245" x2="172.5" y2="294.5" />
-          </g>
-        </g>
-      </svg>
+      <AmbientCourtMotif variant="full" opacity={0.7} />
 
-      {/* One vertically centered column: QR tile → gap-6 → code row → gap-8 → subheading → gap-5 → steps */}
-      <div className="relative z-10 flex h-full w-full flex-col items-center justify-center text-center">
-        {/* 2. Bigger QR code tile (w-full max-w-[280px] aspect-square rounded-3xl bg-[#FEFEFB] p-5) */}
+      {/* Elevated #0B2239 Signature Pairing Card (2px #00E5B8 top highlight) */}
+      <div className="relative z-10 w-full max-w-[450px] rounded-[20px] bg-[#0B2239] border border-[#24425E] dv-top-accent p-7 flex flex-col items-center text-center shadow-2xl">
+        <span className="dv-overline mb-2">COURTSIDE TV PROJECTION</span>
+        <h2 className="dv-display text-[32px] leading-[1.06] text-[#FFFFFF] m-0 mb-6">
+          SCAN TO PAIR SCREEN
+        </h2>
+
+        {/* Crisp White QR Tile */}
         <div
           role="img"
           aria-label="QR code to project to this screen"
-          className="w-full max-w-[280px] aspect-square rounded-3xl bg-[#FEFEFB] p-5 grid place-items-center"
+          className="w-[240px] h-[240px] rounded-[14px] bg-[#FFFFFF] border border-[#24425E] p-3.5 grid place-items-center"
         >
           {tvQrSvg && !isRefreshing ? (
             <div
@@ -202,15 +188,17 @@ export function CourtPanel() {
               dangerouslySetInnerHTML={{ __html: tvQrSvg }}
             />
           ) : (
-            <Loader2 size={32} className="animate-spin text-[#0F5C62]" aria-hidden="true" />
+            <Loader2 size={32} className="animate-spin text-[#00E5B8]" aria-hidden="true" />
           )}
         </div>
 
-        {/* 3. Stacked TV code chip + 48px Refresh icon button (gap-6 below QR tile) */}
-        <div className="mt-6 flex items-center gap-3 justify-center">
-          <div className="flex flex-col items-center gap-0.5 rounded-2xl bg-[#FAF9F5]/10 px-6 py-3">
-            <span className="text-sm font-medium text-[#EAF0E5]/80">TV code</span>
-            <span className="text-3xl font-semibold tracking-[0.18em] pl-[0.18em] text-[#FEFEFB] tabular-nums select-all whitespace-nowrap">
+        {/* Stacked TV Code Chip + 44px Refresh Icon Button */}
+        <div className="mt-5 flex items-center gap-3 justify-center">
+          <div className="flex flex-col items-center justify-center rounded-[12px] bg-[#07192B] border border-[#24425E] px-6 py-2.5 min-w-[198px]">
+            <span className="text-[11px] font-bold uppercase tracking-[0.12em] text-[#6C87A3]">
+              TV CODE
+            </span>
+            <span className="font-mono text-[24px] font-bold tracking-[0.18em] pl-[0.18em] text-[#00E5B8] tabular-nums select-all whitespace-nowrap leading-tight">
               {isRefreshing ? '••••••' : shortTvCode || '------'}
             </span>
           </div>
@@ -221,36 +209,38 @@ export function CourtPanel() {
             disabled={isRefreshing}
             aria-label="Refresh TV code"
             title="Refresh TV code"
-            className="size-12 shrink-0 rounded-full bg-[#FAF9F5]/10 text-[#FAF9F5] hover:bg-[#FAF9F5]/20 border-0 grid place-items-center cursor-pointer transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FAF9F5]/60"
+            className="size-[44px] shrink-0 rounded-[12px] bg-[#07192B] border border-[#24425E] text-[#FFFFFF] hover:border-[#00E5B8] hover:text-[#00E5B8] grid place-items-center cursor-pointer transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#00E5B8]"
           >
             <RefreshCw
-              size={20}
+              size={18}
               className={isRefreshing ? 'animate-spin' : ''}
               aria-hidden="true"
             />
           </button>
         </div>
 
-        {/* 4. Subheading (gap-8 below code row) */}
-        <h2 className="mt-8 text-2xl xl:text-3xl font-semibold leading-tight text-[#FAF9F5] text-center text-balance">
+        <h3 className="mt-6 text-[18px] font-bold text-[#FFFFFF] m-0">
           Scan to connect your device
-        </h2>
+        </h3>
 
-        {/* 5. Steps (gap-5 below subheading, left-aligned inside w-fit mx-auto) */}
-        <ol className="mt-5 p-0 list-none flex flex-col gap-3 w-fit mx-auto text-left">
-          <li className="flex items-center gap-3 text-base xl:text-lg text-[#FAF9F5]">
-            <span className="size-8 shrink-0 text-base font-semibold rounded-full bg-[#FAF9F5]/10 text-[#FAF9F5] grid place-items-center">
+        <ol className="mt-4 p-0 list-none flex flex-col gap-3 w-full max-w-[330px] text-left">
+          <li className="flex items-center gap-3 text-[14.5px] text-[#B0C4D8]">
+            <span className="size-7 shrink-0 text-[13px] font-bold rounded-full bg-[#07192B] border border-[#00E5B8] text-[#00E5B8] grid place-items-center">
               1
             </span>
-            <span>Claim an available court</span>
+            <span>Claim an available court on /matches</span>
           </li>
-          <li className="flex items-center gap-3 text-base xl:text-lg text-[#FAF9F5]">
-            <span className="size-8 shrink-0 text-base font-semibold rounded-full bg-[#FAF9F5]/10 text-[#FAF9F5] grid place-items-center">
+          <li className="flex items-center gap-3 text-[14.5px] text-[#B0C4D8]">
+            <span className="size-7 shrink-0 text-[13px] font-bold rounded-full bg-[#07192B] border border-[#00E5B8] text-[#00E5B8] grid place-items-center">
               2
             </span>
-            <span>Scan the QR or enter the TV code to project</span>
+            <span>Scan QR or enter TV code to project</span>
           </li>
         </ol>
+
+        <p className="mt-5 text-[12.5px] text-[#6C87A3] m-0">
+          Auto-switches to Standby Poster when paired
+        </p>
       </div>
     </aside>
   );

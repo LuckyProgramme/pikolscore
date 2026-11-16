@@ -21,6 +21,7 @@ import Header from '@/components/layout/Header';
 import AuthLoadingSplash from '@/components/auth/AuthLoadingSplash';
 import CourtQrLobbyModal from '@/components/scoreboard/CourtQrLobbyModal';
 import ProjectToScreenModal from '@/components/scoreboard/ProjectToScreenModal';
+import AmbientCourtMotif from '@/components/ui/AmbientCourtMotif';
 import { formatMmSs } from '@/hooks/useMatchTimer';
 import { pairTvWithCourt } from '@/lib/tv-pairing';
 
@@ -435,7 +436,6 @@ export default function MatchesPage() {
       return;
     }
 
-    // If not assigned and no court selected yet, open the "Choose your court" modal prompt
     if (!selectedCourt) {
       const firstAvail =
         [1, 2, 3, 4].find((c) => getCourtStatus(c) === 'available') || null;
@@ -443,7 +443,6 @@ export default function MatchesPage() {
       setDropdownOpen(true);
       setIsCourtPickerOpen(true);
     } else if (getCourtStatus(selectedCourt) !== 'available') {
-      // If the previously selected court became occupied or active by someone else while we were unassigned, re-prompt
       const firstAvail =
         [1, 2, 3, 4].find((c) => getCourtStatus(c) === 'available') || null;
       setSelectedCourt(null);
@@ -471,7 +470,7 @@ export default function MatchesPage() {
     return () => document.removeEventListener('mousedown', handleOutside);
   }, [dropdownOpen]);
 
-  // If the umpire scanned a TV QR and is already assigned to a court, auto-pair immediately!
+  // Auto-pair if arriving with ?tv=<tvId> while assigned
   useEffect(() => {
     if (!user?.id || isLoadingCourts || !pendingTvId || !myAssignedCourtNumber || isSubmitting) {
       return;
@@ -508,7 +507,7 @@ export default function MatchesPage() {
     [1, 2, 3, 4].find((c) => getCourtStatus(c) === 'available') ||
     1;
 
-  // Other courts for the Right Sidebar ("Other Courts · Live venue status")
+  // Other courts for Right Sidebar
   const sidebarCourts = [1, 2, 3, 4]
     .filter((cNum) => cNum !== displayCourtNum)
     .map((cNum) => ({
@@ -524,20 +523,25 @@ export default function MatchesPage() {
   const renderTeamColumn = (courtNum, teamIdx, teamLabel, teamSlots, isMyCourt) => {
     const teamReadyCount =
       (teamSlots[0]?.name?.trim() ? 1 : 0) + (teamSlots[1]?.name?.trim() ? 1 : 0);
+    const isTeamReady = teamReadyCount === 2;
 
     return (
       <div
         className={`p-5 sm:p-6 flex flex-col gap-3 ${
-          teamIdx === 0
-            ? 'border-b sm:border-b-0 sm:border-r border-[#E2E5DC]'
-            : ''
+          teamIdx === 0 ? 'border-b sm:border-b-0 sm:border-r border-[#11263C]' : ''
         }`}
       >
         <div className="flex items-center justify-between">
-          <span className="text-[15px] font-extrabold text-[#084B46] tracking-[-0.01em]">
+          <span className="text-[14px] font-bold uppercase tracking-[0.06em] text-[#FFFFFF]">
             {teamLabel}
           </span>
-          <span className="text-xs font-bold text-[#0F5C62] bg-[#EAF0E5] px-2.5 py-0.5 rounded-full">
+          <span
+            className={`text-[11.5px] font-bold px-2.5 py-0.5 rounded-full border ${
+              isTeamReady
+                ? 'text-[#00E5B8] bg-[#00E5B8]/15 border-[#00E5B8]/50'
+                : 'text-[#F4A261] bg-[#F4A261]/15 border-[#F4A261]/50'
+            }`}
+          >
             {teamReadyCount}/2 Ready
           </span>
         </div>
@@ -554,10 +558,10 @@ export default function MatchesPage() {
             return (
               <div
                 key={`t${teamIdx}-${sIdx}`}
-                className="h-[46px] px-3.5 rounded-xl bg-[#EAF0E5] border-[1.5px] border-[#0F5C62]/20 text-[#084B46] font-bold text-sm flex items-center justify-between gap-2 transition-all"
+                className="h-[52px] px-3.5 rounded-[10px] bg-[#07192B] border border-[#24425E] text-[#FFFFFF] font-semibold text-[15px] flex items-center justify-between gap-2"
               >
                 <div className="flex items-center min-w-0">
-                  <span className="w-[22px] h-[22px] rounded-md bg-[#0F5C62]/15 text-[#084B46] text-[11px] font-extrabold inline-flex items-center justify-center mr-2.5 shrink-0">
+                  <span className="w-[26px] h-[26px] rounded-[6px] bg-[#00E5B8]/15 text-[#00E5B8] text-[12px] font-bold inline-flex items-center justify-center mr-3 shrink-0">
                     {sIdx + 1}
                   </span>
                   <span className="truncate">{slot.name}</span>
@@ -566,10 +570,11 @@ export default function MatchesPage() {
                   <button
                     type="button"
                     onClick={() => handleSetWalkupSlot(courtNum, teamIdx, sIdx, '')}
-                    className="text-[#748079] hover:text-[#BA1A1A] p-1 bg-transparent border-0 cursor-pointer shrink-0"
+                    className="text-[#6C87A3] hover:text-[#F47067] p-1 bg-transparent border-0 cursor-pointer shrink-0 transition-colors"
                     title="Remove player"
+                    aria-label={`Remove ${slot.name}`}
                   >
-                    <X size={15} />
+                    <X size={16} />
                   </button>
                 )}
               </div>
@@ -577,43 +582,49 @@ export default function MatchesPage() {
           }
 
           if (isAdding) {
+            const hasTypedName = Boolean(walkupName.trim());
             return (
-              <div
-                key={`t${teamIdx}-${sIdx}`}
-                className="h-[46px] px-2.5 rounded-xl bg-[#FAF9F5] border-[1.5px] border-[#0F5C62] flex items-center gap-1.5"
-              >
-                <span className="w-[22px] h-[22px] rounded-md bg-[#0F5C62]/12 text-[#084B46] text-[11px] font-extrabold inline-flex items-center justify-center shrink-0">
-                  {sIdx + 1}
+              <div key={`t${teamIdx}-${sIdx}`} className="flex flex-col gap-1.5">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    autoFocus
+                    placeholder="Walk-up player name"
+                    value={walkupName}
+                    onChange={(e) => setWalkupName(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && hasTypedName) {
+                        handleSetWalkupSlot(courtNum, teamIdx, sIdx, walkupName);
+                      } else if (e.key === 'Escape') {
+                        setActiveWalkup(null);
+                      }
+                    }}
+                    className="h-[52px] flex-1 min-w-0 rounded-[10px] bg-[#07192B] border border-[#00E5B8] px-4 text-[16px] font-medium text-[#FFFFFF] placeholder:text-[#6C87A3] outline-none"
+                  />
+                  <button
+                    type="button"
+                    disabled={!hasTypedName || isSubmitting}
+                    onClick={() => handleSetWalkupSlot(courtNum, teamIdx, sIdx, walkupName)}
+                    className={`min-w-[78px] h-[52px] px-3 rounded-[10px] border text-[15px] font-bold transition-colors cursor-pointer shrink-0 ${
+                      hasTypedName
+                        ? 'bg-[#07192B] border-[#00E5B8] text-[#FFFFFF] hover:bg-[#00E5B8] hover:text-[#031B28]'
+                        : 'bg-[#07192B] border-[#24425E] text-[#6C87A3] cursor-not-allowed'
+                    }`}
+                  >
+                    + Add
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActiveWalkup(null)}
+                    aria-label="Cancel walk-up entry"
+                    className="h-[52px] w-9 grid place-items-center text-[#6C87A3] hover:text-[#FFFFFF] bg-transparent border-0 cursor-pointer shrink-0"
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
+                <span className="text-[12px] text-[#B0C4D8]">
+                  Walk-up input active · Tap + Add to assign slot {sIdx + 1}
                 </span>
-                <input
-                  type="text"
-                  autoFocus
-                  placeholder="Walk-up player name"
-                  value={walkupName}
-                  onChange={(e) => setWalkupName(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      handleSetWalkupSlot(courtNum, teamIdx, sIdx, walkupName);
-                    } else if (e.key === 'Escape') {
-                      setActiveWalkup(null);
-                    }
-                  }}
-                  className="h-8 flex-1 min-w-0 rounded-lg bg-white border border-[#E2E5DC] px-2.5 text-xs font-semibold text-[#084B46] outline-none"
-                />
-                <button
-                  type="button"
-                  onClick={() => handleSetWalkupSlot(courtNum, teamIdx, sIdx, walkupName)}
-                  className="h-8 px-2.5 rounded-lg bg-[#0F5C62] text-xs font-bold text-[#FEECD6] border-0 cursor-pointer"
-                >
-                  Add
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setActiveWalkup(null)}
-                  className="h-8 px-1.5 text-xs text-[#748079] hover:text-[#084B46] bg-transparent border-0 cursor-pointer"
-                >
-                  <X size={14} />
-                </button>
               </div>
             );
           }
@@ -621,10 +632,10 @@ export default function MatchesPage() {
           return (
             <div
               key={`t${teamIdx}-${sIdx}`}
-              className="h-[46px] px-3.5 rounded-xl bg-[#FAF9F5] border-[1.5px] border-dashed border-[#E2E5DC] text-[#748079] font-medium text-sm flex items-center justify-between gap-2 transition-all"
+              className="h-[52px] px-3.5 rounded-[10px] bg-[#021024]/60 border border-dashed border-[#24425E] text-[#6C87A3] font-medium text-[14px] flex items-center justify-between gap-2"
             >
               <div className="flex items-center">
-                <span className="w-[22px] h-[22px] rounded-md bg-[#0F5C62]/10 text-[#084B46] text-[11px] font-extrabold inline-flex items-center justify-center mr-2.5 shrink-0">
+                <span className="w-[26px] h-[26px] rounded-[6px] bg-[#07192B] border border-[#24425E] text-[#6C87A3] text-[12px] font-bold inline-flex items-center justify-center mr-3 shrink-0">
                   {sIdx + 1}
                 </span>
                 <span>Open slot</span>
@@ -637,9 +648,9 @@ export default function MatchesPage() {
                   setActiveWalkup({ courtNumber: courtNum, team: teamIdx, slotIndex: sIdx });
                   setWalkupName('');
                 }}
-                className="bg-[#FEFEFB] border border-[#E2E5DC] text-[#0F5C62] font-bold text-xs px-2.5 py-1 rounded-lg enabled:hover:bg-[#EAF0E5] enabled:hover:border-[#0F5C62] transition-colors cursor-pointer disabled:opacity-45 disabled:cursor-not-allowed inline-flex items-center gap-1"
+                className="h-[34px] px-3 rounded-[8px] bg-[#07192B] border border-[#24425E] text-[#FFFFFF] font-semibold text-[12.5px] enabled:hover:border-[#00E5B8] enabled:hover:text-[#00E5B8] transition-colors cursor-pointer disabled:opacity-45 disabled:cursor-not-allowed inline-flex items-center gap-1"
               >
-                <Plus size={12} />
+                <Plus size={13} />
                 <span>Walk-up</span>
               </button>
             </div>
@@ -658,13 +669,11 @@ export default function MatchesPage() {
     const umpireName = session?.player_names?.umpireName;
     const hasOtherUmpire = Boolean(assignedUmpireId && !isMyCourt);
 
-    // Derive slots
     const pNames = session?.player_names || {};
     const slots = pNames.slots || { team0: [null, null], team1: [null, null] };
     const team0Slots = slots.team0 || [null, null];
     const team1Slots = slots.team1 || [null, null];
 
-    // Filled slots count
     const filledCount =
       (team0Slots[0]?.name ? 1 : 0) +
       (team0Slots[1]?.name ? 1 : 0) +
@@ -675,47 +684,45 @@ export default function MatchesPage() {
     return (
       <section
         key={courtNum}
-        className={`rounded-3xl border-[1.5px] bg-[#FEFEFB] overflow-hidden shadow-[0_10px_30px_-12px_rgba(8,75,70,0.08)] transition-all ${
-          isMyCourt ? 'border-[#0F5C62]' : 'border-[#E2E5DC]'
-        }`}
+        className="rounded-[20px] border border-[#24425E] dv-top-accent bg-[#0B2239] overflow-hidden shadow-2xl transition-all"
       >
-        {/* Unified Card Header + Court Switcher */}
-        <div className="px-5 sm:px-6 py-5 bg-[#FEFEFB] border-b border-[#E2E5DC] flex items-center justify-between gap-4 flex-wrap">
+        {/* Unified Card Header + Utility Buttons */}
+        <div className="px-5 sm:px-6 py-5 border-b border-[#11263C] flex items-center justify-between gap-4 flex-wrap">
           <div className="flex items-center gap-3.5">
-            <div className="flex h-11 w-11 items-center justify-center rounded-[14px] font-extrabold text-xl bg-[#0F5C62] text-[#FEECD6] shrink-0">
+            <div className="flex h-[46px] w-[46px] items-center justify-center rounded-[12px] font-display font-extrabold text-[28px] leading-none bg-[#00E5B8] text-[#031B28] shrink-0">
               {courtNum}
             </div>
             <div>
-              <h2 className="text-[22px] font-extrabold text-[#084B46] m-0 leading-tight">
-                Court {courtNum}
+              <h2 className="dv-display text-[26px] leading-[1.08] text-[#FFFFFF] m-0">
+                COURT {courtNum}
               </h2>
 
-              <div className="flex items-center gap-2 text-[13px] font-semibold text-[#384640] mt-0.5 flex-wrap">
+              <div className="flex items-center gap-2 text-[13px] font-semibold text-[#B0C4D8] mt-1 flex-wrap">
                 {isMyCourt ? (
                   <>
                     <span className="inline-flex items-center gap-1.5">
-                      <span className="size-2 rounded-full bg-[#0F5C62]" />
+                      <span className="size-2 rounded-full bg-[#00E5B8]" />
                       <span>Officiating: You</span>
                     </span>
-                    <span className="text-[#748079]">·</span>
+                    <span className="text-[#6C87A3]">·</span>
                     <span>{filledCount}/4 Players Ready</span>
                   </>
                 ) : hasOtherUmpire ? (
                   <>
-                    <span className="inline-flex items-center gap-1.5 text-[#748079]">
-                      <span className="size-2 rounded-full bg-[#748079]" />
+                    <span className="inline-flex items-center gap-1.5 text-[#6C87A3]">
+                      <span className="size-2 rounded-full bg-[#6C87A3]" />
                       <span>Officiating: {umpireName || 'Another Umpire'}</span>
                     </span>
-                    <span className="text-[#748079]">·</span>
+                    <span className="text-[#6C87A3]">·</span>
                     <span>{filledCount}/4 Players Ready</span>
                   </>
                 ) : (
                   <>
                     <span className="inline-flex items-center gap-1.5">
-                      <span className="size-2 rounded-full bg-[#0F5C62]" />
+                      <span className="size-2 rounded-full bg-[#00E5B8]" />
                       <span>Available court</span>
                     </span>
-                    <span className="text-[#748079]">·</span>
+                    <span className="text-[#6C87A3]">·</span>
                     <span>{filledCount}/4 Players Ready</span>
                   </>
                 )}
@@ -723,14 +730,14 @@ export default function MatchesPage() {
             </div>
           </div>
 
-          {/* Header Utilities: Change Court / Leave Court, Project to Screen & Court QR */}
+          {/* Small Footer/Header Utility Buttons (40px height, 10px radius, 8px gap) */}
           <div className="flex items-center gap-2 flex-wrap">
             {isMyCourt && !isMatchStarted ? (
               <button
                 type="button"
                 disabled={isSubmitting}
                 onClick={() => handleLeaveCourt(courtNum)}
-                className="h-[38px] px-3.5 rounded-full bg-[#FAF9F5] border-[1.5px] border-[#BA1A1A]/35 text-[13px] font-bold text-[#BA1A1A] enabled:hover:bg-red-50 enabled:hover:border-[#BA1A1A] transition-colors inline-flex items-center gap-1.5 cursor-pointer disabled:opacity-45 disabled:cursor-not-allowed"
+                className="h-[40px] px-3.5 rounded-[10px] bg-[#07192B] border border-[#F47067] text-[13px] font-semibold text-[#F47067] enabled:hover:bg-[#F47067]/10 transition-colors inline-flex items-center gap-1.5 cursor-pointer disabled:opacity-45 disabled:cursor-not-allowed"
                 title={`Leave Court ${courtNum}`}
               >
                 <X size={14} />
@@ -746,7 +753,7 @@ export default function MatchesPage() {
                   setDropdownOpen(true);
                   setIsCourtPickerOpen(true);
                 }}
-                className="h-[38px] px-3.5 rounded-full bg-[#FAF9F5] border-[1.5px] border-[#E2E5DC] text-[13px] font-bold text-[#084B46] enabled:hover:bg-[#EAF0E5] enabled:hover:border-[#0F5C62] transition-colors inline-flex items-center gap-1.5 cursor-pointer disabled:opacity-45 disabled:cursor-not-allowed"
+                className="h-[40px] px-3.5 rounded-[10px] bg-[#07192B] border border-[#24425E] text-[13px] font-semibold text-[#FFFFFF] enabled:hover:border-[#00E5B8] transition-colors inline-flex items-center gap-1.5 cursor-pointer disabled:opacity-45 disabled:cursor-not-allowed"
                 title="Choose a different available court"
               >
                 <ChevronDown size={14} />
@@ -757,7 +764,7 @@ export default function MatchesPage() {
               type="button"
               disabled={!isMyCourt}
               onClick={() => isMyCourt && setProjectModalCourtNum(courtNum)}
-              className="h-[38px] px-3.5 rounded-full bg-[#FAF9F5] border-[1.5px] border-[#E2E5DC] text-[13px] font-bold text-[#084B46] enabled:hover:bg-[#EAF0E5] enabled:hover:border-[#0F5C62] transition-colors inline-flex items-center gap-1.5 cursor-pointer disabled:opacity-45 disabled:cursor-not-allowed"
+              className="h-[40px] px-3.5 rounded-[10px] bg-[#07192B] border border-[#24425E] text-[13px] font-semibold text-[#FFFFFF] enabled:hover:border-[#00E5B8] transition-colors inline-flex items-center gap-1.5 cursor-pointer disabled:opacity-45 disabled:cursor-not-allowed"
               title={
                 isMyCourt
                   ? `Project Court ${courtNum} to a TV Screen`
@@ -770,7 +777,7 @@ export default function MatchesPage() {
             <button
               type="button"
               onClick={() => setQrModalCourtNum(courtNum)}
-              className="h-[38px] px-3.5 rounded-full bg-[#FAF9F5] border-[1.5px] border-[#E2E5DC] text-[13px] font-bold text-[#084B46] hover:bg-[#EAF0E5] hover:border-[#0F5C62] transition-colors inline-flex items-center gap-1.5 cursor-pointer"
+              className="h-[40px] px-3.5 rounded-[10px] bg-[#07192B] border border-[#24425E] text-[13px] font-semibold text-[#FFFFFF] hover:border-[#00E5B8] transition-colors inline-flex items-center gap-1.5 cursor-pointer"
               title={`View QR Code for Court ${courtNum}`}
             >
               <QrCode size={14} />
@@ -779,29 +786,29 @@ export default function MatchesPage() {
           </div>
         </div>
 
-        {/* Flattened 2-Column Court Roster Sheet */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 border-b border-[#E2E5DC]">
+        {/* 2-Column Court Roster Grid */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 border-b border-[#11263C]">
           {renderTeamColumn(courtNum, 0, 'Team A', team0Slots, isMyCourt)}
           {renderTeamColumn(courtNum, 1, 'Team B', team1Slots, isMyCourt)}
         </div>
 
-        {/* Compact Single-Row First Serve Strip */}
-        <div className="px-5 sm:px-6 py-4 bg-[#FAF9F5] border-b border-[#E2E5DC] flex items-center justify-between gap-4 flex-wrap">
-          <span className="text-sm font-bold text-[#084B46]">
+        {/* First Serving Team Strip */}
+        <div className="px-5 sm:px-6 py-4 bg-[#07192B] border-b border-[#11263C] flex items-center justify-between gap-4 flex-wrap">
+          <span className="text-[13px] font-bold uppercase tracking-[0.08em] text-[#D8E4F0]">
             First serving team
           </span>
           <div className="flex items-center gap-2.5 flex-wrap">
-            <div className="inline-flex bg-[#FEFEFB] border-[1.5px] border-[#E2E5DC] p-[3px] rounded-xl">
+            <div className="inline-flex bg-[#021024] border border-[#24425E] p-1 rounded-[10px]">
               <button
                 type="button"
                 disabled={!isMyCourt}
                 onClick={() =>
                   isMyCourt && setFirstServerMap((prev) => ({ ...prev, [courtNum]: 0 }))
                 }
-                className={`px-[18px] py-[7px] rounded-[9px] text-[13px] font-bold transition-colors border-0 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
+                className={`px-4 py-1.5 rounded-[8px] text-[13.5px] font-bold transition-colors border-0 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
                   firstServerMap[courtNum] === 0
-                    ? 'bg-[#0F5C62] text-[#FEECD6]'
-                    : 'bg-transparent text-[#384640] enabled:hover:text-[#084B46]'
+                    ? 'bg-[#00E5B8] text-[#031B28]'
+                    : 'bg-transparent text-[#B0C4D8] enabled:hover:text-[#FFFFFF]'
                 }`}
               >
                 Team A
@@ -812,10 +819,10 @@ export default function MatchesPage() {
                 onClick={() =>
                   isMyCourt && setFirstServerMap((prev) => ({ ...prev, [courtNum]: 1 }))
                 }
-                className={`px-[18px] py-[7px] rounded-[9px] text-[13px] font-bold transition-colors border-0 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
+                className={`px-4 py-1.5 rounded-[8px] text-[13.5px] font-bold transition-colors border-0 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
                   firstServerMap[courtNum] === 1
-                    ? 'bg-[#0F5C62] text-[#FEECD6]'
-                    : 'bg-transparent text-[#384640] enabled:hover:text-[#084B46]'
+                    ? 'bg-[#00E5B8] text-[#031B28]'
+                    : 'bg-transparent text-[#B0C4D8] enabled:hover:text-[#FFFFFF]'
                 }`}
               >
                 Team B
@@ -826,22 +833,22 @@ export default function MatchesPage() {
               type="button"
               disabled={!isMyCourt}
               onClick={() => isMyCourt && handleRandomizeServer(courtNum)}
-              className="h-[38px] px-3.5 rounded-xl border-[1.5px] border-[#E2E5DC] bg-[#FEFEFB] text-[#0F5C62] text-xs font-bold inline-flex items-center gap-1.5 enabled:hover:bg-[#EAF0E5] enabled:hover:border-[#0F5C62] transition-colors cursor-pointer disabled:opacity-45 disabled:cursor-not-allowed"
+              className="h-[40px] px-3.5 rounded-[10px] border border-[#24425E] bg-[#07192B] text-[#FFFFFF] text-[13px] font-semibold inline-flex items-center gap-1.5 enabled:hover:border-[#00E5B8] transition-colors cursor-pointer disabled:opacity-45 disabled:cursor-not-allowed"
             >
-              <Shuffle size={13} />
+              <Shuffle size={14} />
               <span>Randomize</span>
             </button>
           </div>
         </div>
 
         {/* Bottom Primary Action CTA */}
-        <div className="p-5 sm:px-6 bg-[#FEFEFB]">
+        <div className="p-5 sm:px-6 bg-[#0B2239]">
           {!isMyCourt && !hasOtherUmpire && !isMatchStarted ? (
             <button
               type="button"
               disabled={isSubmitting || Boolean(myAssignedCourtNumber)}
               onClick={() => handleJoinCourt(courtNum)}
-              className="h-[52px] w-full rounded-2xl bg-[#0F5C62] text-[#FEECD6] text-base font-extrabold hover:bg-[#085953] transition-colors cursor-pointer disabled:opacity-45 disabled:cursor-not-allowed border-0 shadow-[0_6px_16px_-4px_rgba(15,92,98,0.35)] flex items-center justify-center gap-2.5"
+              className="h-[54px] w-full rounded-[12px] bg-[#00E5B8] text-[#031B28] text-[16px] font-bold hover:bg-[#05DFB4] transition-colors cursor-pointer disabled:opacity-45 disabled:cursor-not-allowed border-0 flex items-center justify-center gap-2.5"
             >
               {isSubmitting ? (
                 <>
@@ -856,30 +863,40 @@ export default function MatchesPage() {
               )}
             </button>
           ) : (
-            <button
-              type="button"
-              disabled={!isMyCourt || !isFull || isSubmitting}
-              onClick={() => handleStartMatch(courtNum)}
-              className={`h-[52px] w-full rounded-2xl text-base font-extrabold transition-colors cursor-pointer border-0 flex items-center justify-center gap-2.5 ${
-                isMyCourt && isFull
-                  ? 'bg-[#0F5C62] text-[#FEECD6] hover:bg-[#085953] shadow-[0_6px_16px_-4px_rgba(15,92,98,0.35)]'
-                  : 'bg-[#E2E5DC] text-[#384640] cursor-not-allowed'
-              }`}
-            >
-              {isSubmitting ? (
-                <>
-                  <Loader2 size={18} className="animate-spin" />
-                  <span>Starting Match...</span>
-                </>
-              ) : isFull ? (
-                <>
-                  <Play size={17} fill="currentColor" />
-                  <span>Start Match (30:00)</span>
-                </>
-              ) : (
-                <span>Waiting for 4 Players ({filledCount}/4 Ready)</span>
+            <div className="flex flex-col gap-2.5">
+              {!isFull && (
+                <p className="m-0 text-[13.5px] text-[#B0C4D8]">
+                  Add {4 - filledCount} more player{4 - filledCount === 1 ? '' : 's'} to unlock match start.
+                </p>
               )}
-            </button>
+              <button
+                type="button"
+                disabled={!isMyCourt || !isFull || isSubmitting}
+                onClick={() => handleStartMatch(courtNum)}
+                className={`h-[54px] w-full rounded-[12px] text-[16px] font-bold transition-colors flex items-center justify-center gap-2.5 ${
+                  isMyCourt && isFull
+                    ? 'bg-[#00E5B8] text-[#031B28] hover:bg-[#05DFB4] border-0 cursor-pointer'
+                    : 'bg-[#07192B] border border-[#24425E] text-[#6C87A3] cursor-not-allowed'
+                }`}
+              >
+                {isSubmitting ? (
+                  <>
+                    <Loader2 size={18} className="animate-spin" />
+                    <span>Starting Match...</span>
+                  </>
+                ) : isFull ? (
+                  <>
+                    <Play size={17} fill="currentColor" />
+                    <span>Start Match (30:00)</span>
+                  </>
+                ) : (
+                  <span>Waiting for 4 Players ({filledCount}/4 Ready)</span>
+                )}
+              </button>
+              <p className="m-0 text-center text-[12px] text-[#6C87A3]">
+                Match timer: 30:00 countdown · Official 11-point win by 2
+              </p>
+            </div>
           )}
         </div>
       </section>
@@ -887,7 +904,9 @@ export default function MatchesPage() {
   };
 
   return (
-    <div className="ps-shell min-h-screen flex flex-col bg-[#FAF9F5] text-[#203F39]">
+    <div className="min-h-screen flex flex-col bg-[#021024] text-[#FFFFFF] relative overflow-x-hidden">
+      <AmbientCourtMotif variant="full" opacity={0.35} />
+
       {/* 1. Header */}
       <Header
         profile={profile}
@@ -897,14 +916,15 @@ export default function MatchesPage() {
       />
 
       {/* 2. Main Workspace */}
-      <main className="flex-1 w-full max-w-[1200px] mx-auto px-4 sm:px-8 pt-7 pb-12">
-        {/* Clean Page Header */}
+      <main className="relative z-10 flex-1 w-full max-w-[1200px] mx-auto px-5 sm:px-8 pt-7 pb-12">
+        {/* Page Header */}
         <div className="mb-5 flex items-end justify-between gap-4 flex-wrap">
           <div>
-            <h1 className="text-[28px] font-extrabold tracking-[-0.02em] text-[#084B46] m-0">
-              Umpire Court Hub
+            <span className="dv-overline block mb-1">MATCH CONTROL</span>
+            <h1 className="dv-display text-[36px] leading-[1.05] text-[#FFFFFF] m-0">
+              UMPIRE COURT HUB
             </h1>
-            <p className="mt-0.5 text-sm text-[#748079]">
+            <p className="mt-1 text-[15px] text-[#B0C4D8]">
               Select an available court to manage player walk-ups, pair a TV screen, and start the match.
             </p>
           </div>
@@ -914,10 +934,10 @@ export default function MatchesPage() {
         {tvPairedMessage && (
           <div
             role="status"
-            className="mb-6 rounded-2xl bg-[#EAF0E5] border-[1.5px] border-[#0F5C62] p-4 text-sm font-bold text-[#084B46] flex items-center justify-between gap-3 animate-in fade-in"
+            className="mb-5 rounded-[12px] bg-[#0B2239] border border-[#00E5B8] p-3.5 text-[14px] font-bold text-[#FFFFFF] flex items-center justify-between gap-3"
           >
-            <div className="flex items-center gap-2.5">
-              <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#0F5C62] text-[#FEECD6] shrink-0">
+            <div className="flex items-center gap-3">
+              <div className="flex h-8 w-8 items-center justify-center rounded-[8px] bg-[#00E5B8] text-[#031B28] shrink-0">
                 <Check size={16} />
               </div>
               <span>{tvPairedMessage}</span>
@@ -925,7 +945,7 @@ export default function MatchesPage() {
             <button
               type="button"
               onClick={() => setTvPairedMessage('')}
-              className="p-1 text-[#084B46] hover:text-[#0F5C62] bg-transparent border-0 cursor-pointer"
+              className="p-1 text-[#B0C4D8] hover:text-[#FFFFFF] bg-transparent border-0 cursor-pointer"
               aria-label="Dismiss TV pairing notice"
             >
               <X size={16} />
@@ -938,21 +958,19 @@ export default function MatchesPage() {
           <div
             role="region"
             aria-label="Pair Courtside TV"
-            className="mb-6 rounded-3xl bg-[#084B46] text-[#FEFEFB] p-5 sm:p-6 border-2 border-[#0F5C62] shadow-lg flex flex-col gap-4"
+            className="mb-6 rounded-[20px] bg-[#0B2239] text-[#FFFFFF] p-5 sm:p-6 border border-[#24425E] dv-top-accent shadow-xl flex flex-col gap-4"
           >
             <div className="flex items-start justify-between gap-3">
               <div className="flex items-center gap-3">
-                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-[#0F5C62] text-[#FEECD6]">
-                  <Tv size={22} />
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[12px] bg-[#00E5B8] text-[#031B28]">
+                  <Tv size={20} />
                 </div>
                 <div>
-                  <span className="text-[11px] font-bold uppercase tracking-widest text-[#FEECD6]">
-                    TV Screen Pairing Active
-                  </span>
-                  <h2 className="text-lg sm:text-xl font-bold text-white m-0 mt-0.5">
-                    Select a Court to Display on the TV Screen
+                  <span className="dv-overline block">TV SCREEN PAIRING ACTIVE</span>
+                  <h2 className="dv-display text-[24px] leading-tight text-[#FFFFFF] m-0 mt-0.5">
+                    SELECT A COURT FOR THIS TV SCREEN
                   </h2>
-                  <p className="text-xs text-[#EAF0E5]/80 m-0 mt-0.5">
+                  <p className="text-[13.5px] text-[#B0C4D8] m-0 mt-0.5">
                     Tap a court below to link the TV and join as its supervising umpire.
                   </p>
                 </div>
@@ -960,7 +978,7 @@ export default function MatchesPage() {
               <button
                 type="button"
                 onClick={() => setPendingTvId(null)}
-                className="p-1.5 text-[#EAF0E5]/70 hover:text-white bg-transparent border-0 cursor-pointer"
+                className="p-1.5 text-[#6C87A3] hover:text-[#FFFFFF] bg-transparent border-0 cursor-pointer"
                 aria-label="Cancel TV pairing"
               >
                 <X size={18} />
@@ -978,12 +996,10 @@ export default function MatchesPage() {
                     type="button"
                     disabled={isSubmitting || otherUmpire}
                     onClick={() => handlePairTvToCourt(cNum, pendingTvId)}
-                    className="h-11 rounded-2xl bg-[#0F5C62] hover:bg-[#FEECD6] hover:text-[#084B46] text-[#FEECD6] text-xs font-bold transition-colors cursor-pointer border border-[#FEECD6]/20 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-1.5"
+                    className="h-[44px] rounded-[10px] bg-[#07192B] border border-[#24425E] enabled:hover:border-[#00E5B8] enabled:hover:bg-[#00E5B8] enabled:hover:text-[#031B28] text-[#FFFFFF] text-[13px] font-bold transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-1.5"
                   >
                     <Tv size={14} />
-                    <span>
-                      {otherUmpire ? `Court ${cNum} (Busy)` : `Pair Court ${cNum}`}
-                    </span>
+                    <span>{otherUmpire ? `Court ${cNum} (Busy)` : `Pair Court ${cNum}`}</span>
                   </button>
                 );
               })}
@@ -995,7 +1011,7 @@ export default function MatchesPage() {
         {actionError && (
           <div
             role="alert"
-            className="mb-6 rounded-2xl bg-red-50 border border-red-200 p-4 text-sm font-semibold text-[#BA1A1A] flex items-center justify-between gap-3 animate-in fade-in"
+            className="mb-5 rounded-[12px] bg-[#0B2239] border border-[#F47067] p-4 text-[14px] font-semibold text-[#F47067] flex items-center justify-between gap-3"
           >
             <div className="flex items-center gap-2">
               <AlertCircle size={18} className="shrink-0" />
@@ -1004,7 +1020,7 @@ export default function MatchesPage() {
             <button
               type="button"
               onClick={() => setActionError('')}
-              className="p-1 text-red-500 hover:text-red-700 bg-transparent border-0 cursor-pointer"
+              className="p-1 text-[#F47067] hover:text-[#FFFFFF] bg-transparent border-0 cursor-pointer"
             >
               <X size={16} />
             </button>
@@ -1013,21 +1029,17 @@ export default function MatchesPage() {
 
         {/* Main Two-Column Layout: Selected Court Sheet (Left) + Live Venue Sidebar (Right) */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-          {/* Left Column: Selected Court Card */}
-          <div className="lg:col-span-8">
-            {renderSelectedCourtCard(displayCourtNum)}
-          </div>
+          <div className="lg:col-span-8">{renderSelectedCourtCard(displayCourtNum)}</div>
 
-          {/* Right Sidebar: Other Courts (Live Venue Status) */}
           <aside
             aria-label="Other courts live venue status"
-            className="lg:col-span-4 rounded-3xl border-[1.5px] border-[#E2E5DC] bg-[#FEFEFB] p-5 flex flex-col gap-3.5"
+            className="lg:col-span-4 rounded-[14px] border border-[#24425E] bg-[#0B2239] p-5 flex flex-col gap-3.5"
           >
-            <div className="flex items-center justify-between pb-3 border-b border-[#E2E5DC]">
-              <h2 className="text-base font-extrabold text-[#084B46] m-0">
+            <div className="flex items-center justify-between pb-3 border-b border-[#11263C]">
+              <h2 className="text-[13px] font-bold uppercase tracking-[0.08em] text-[#FFFFFF] m-0">
                 Other Courts
               </h2>
-              <span className="text-xs font-semibold text-[#748079]">
+              <span className="text-[12px] font-medium text-[#6C87A3]">
                 Live venue status
               </span>
             </div>
@@ -1062,44 +1074,44 @@ export default function MatchesPage() {
                   return (
                     <div
                       key={`sidebar-court-${cNum}`}
-                      className="rounded-[18px] border-[1.5px] border-[#FED7AA] bg-[#FFF7ED] p-4 flex flex-col gap-3"
+                      className="rounded-[12px] border border-[#F4A261] bg-[#07192B] p-4 flex flex-col gap-3"
                     >
                       <div className="flex items-center justify-between gap-2">
                         <div className="flex items-center gap-2.5">
-                          <div className="flex h-[34px] w-[34px] items-center justify-center rounded-[10px] bg-[#EA580C] text-white text-[15px] font-extrabold shrink-0">
+                          <div className="flex h-[36px] w-[36px] items-center justify-center rounded-[10px] bg-[#F4A261] text-[#031B28] font-display text-[22px] font-extrabold shrink-0">
                             {cNum}
                           </div>
                           <div>
-                            <div className="text-[15px] font-extrabold text-[#084B46]">
+                            <div className="text-[15px] font-bold text-[#FFFFFF]">
                               Court {cNum}
                             </div>
-                            <div className="text-xs text-[#748079]">
+                            <div className="text-[12px] text-[#B0C4D8]">
                               Umpire: {umpireName}
                             </div>
                           </div>
                         </div>
 
-                        <span className="inline-flex items-center gap-1.5 rounded-full bg-[#FFEDD5] px-2.5 py-1 text-[11px] font-extrabold text-[#C2410C]">
-                          <span className="size-2 rounded-full bg-[#EA580C]" />
+                        <span className="inline-flex items-center gap-1.5 rounded-full border border-[#F4A261]/60 bg-[#F4A261]/15 px-2.5 py-1 text-[11px] font-bold text-[#F4A261]">
+                          <span className="size-1.5 rounded-full bg-[#F4A261]" />
                           <span>Active · {timerDisplay}</span>
                         </span>
                       </div>
 
-                      <div className="rounded-xl bg-white border border-[#FED7AA] px-3.5 py-2.5 flex items-center justify-between">
+                      <div className="rounded-[10px] bg-[#021024] border border-[#11263C] px-3.5 py-2.5 flex items-center justify-between">
                         <div className="flex flex-col gap-0.5">
-                          <span className="text-[11px] font-bold uppercase text-[#748079] truncate max-w-[100px]">
+                          <span className="text-[11px] font-bold uppercase tracking-[0.06em] text-[#6C87A3] truncate max-w-[100px]">
                             {session?.team_names?.[0] || 'TEAM A'}
                           </span>
-                          <span className="text-[22px] font-extrabold text-[#084B46] leading-none tabular-nums">
+                          <span className="font-display text-[32px] font-extrabold text-[#FFFFFF] leading-none tabular-nums">
                             {score0}
                           </span>
                         </div>
-                        <span className="text-xs font-bold text-[#748079]">vs</span>
+                        <span className="text-[12px] font-semibold text-[#6C87A3]">vs</span>
                         <div className="flex flex-col gap-0.5 text-right">
-                          <span className="text-[11px] font-bold uppercase text-[#748079] truncate max-w-[100px]">
+                          <span className="text-[11px] font-bold uppercase tracking-[0.06em] text-[#6C87A3] truncate max-w-[100px]">
                             {session?.team_names?.[1] || 'TEAM B'}
                           </span>
-                          <span className="text-[22px] font-extrabold text-[#084B46] leading-none tabular-nums">
+                          <span className="font-display text-[32px] font-extrabold text-[#B0C4D8] leading-none tabular-nums">
                             {score1}
                           </span>
                         </div>
@@ -1108,7 +1120,7 @@ export default function MatchesPage() {
                       <button
                         type="button"
                         onClick={() => router.push(`/pikolscore?session=${session.id}`)}
-                        className="h-9 w-full flex items-center justify-center gap-1.5 rounded-[10px] bg-[#EA580C] text-white text-xs font-bold hover:bg-[#C2410C] transition-colors cursor-pointer border-0"
+                        className="h-[40px] w-full flex items-center justify-center gap-1.5 rounded-[10px] bg-[#07192B] border border-[#F4A261] text-[#F4A261] text-[13px] font-semibold hover:bg-[#F4A261] hover:text-[#031B28] transition-colors cursor-pointer"
                       >
                         <Eye size={14} />
                         <span>Spectate Match</span>
@@ -1121,24 +1133,23 @@ export default function MatchesPage() {
                   return (
                     <div
                       key={`sidebar-court-${cNum}`}
-                      className="px-3.5 py-[13px] rounded-2xl bg-[#FAF9F5] border border-[#E2E5DC] flex items-center justify-between gap-2"
+                      className="px-3.5 py-3.5 rounded-[12px] bg-[#07192B] border border-[#24425E] flex items-center justify-between gap-2"
                     >
                       <div className="flex items-center gap-2.5 min-w-0">
-                        <div className="flex h-[34px] w-[34px] items-center justify-center rounded-[10px] bg-[#E2E5DC] text-[#384640] text-[15px] font-extrabold shrink-0">
+                        <div className="flex h-[36px] w-[36px] items-center justify-center rounded-[10px] bg-[#0B2239] border border-[#24425E] text-[#6C87A3] font-display text-[22px] font-extrabold shrink-0">
                           {cNum}
                         </div>
                         <div className="min-w-0">
-                          <div className="text-sm font-extrabold text-[#084B46]">
+                          <div className="text-[15px] font-bold text-[#FFFFFF]">
                             Court {cNum}
                           </div>
-                          <div className="text-xs text-[#748079] truncate">
-                            Umpire: {umpireName} · {filled}/4 players
+                          <div className="text-[12px] text-[#6C87A3] truncate">
+                            {umpireName} · {filled}/4 players
                           </div>
                         </div>
                       </div>
 
-                      <span className="inline-flex items-center gap-1.5 rounded-full bg-[#E2E5DC] px-2.5 py-1 text-[11px] font-bold text-[#384640] shrink-0">
-                        <span className="size-2 rounded-full bg-[#748079]" />
+                      <span className="inline-flex items-center gap-1.5 rounded-full bg-[#0B2239] border border-[#24425E] px-2.5 py-1 text-[11px] font-bold text-[#6C87A3] shrink-0">
                         <span>Occupied</span>
                       </span>
                     </div>
@@ -1159,24 +1170,24 @@ export default function MatchesPage() {
                         ? `Leave Court ${myAssignedCourtNumber} first to switch courts`
                         : `Switch to Court ${cNum}`
                     }
-                    className="w-full text-left px-3.5 py-[13px] rounded-2xl bg-[#FAF9F5] border border-[#E2E5DC] enabled:hover:border-[#0F5C62] enabled:hover:bg-[#EAF0E5]/50 transition-colors flex items-center justify-between gap-2 cursor-pointer disabled:cursor-default"
+                    className="w-full text-left px-3.5 py-3.5 rounded-[12px] bg-[#07192B] border border-[#24425E] enabled:hover:border-[#00E5B8] transition-colors flex items-center justify-between gap-2 cursor-pointer disabled:cursor-default"
                   >
                     <div className="flex items-center gap-2.5 min-w-0">
-                      <div className="flex h-[34px] w-[34px] items-center justify-center rounded-[10px] bg-[#EAF0E5] text-[#0F5C62] text-[15px] font-extrabold shrink-0">
+                      <div className="flex h-[36px] w-[36px] items-center justify-center rounded-[10px] bg-[#00E5B8]/15 border border-[#00E5B8] text-[#00E5B8] font-display text-[22px] font-extrabold shrink-0">
                         {cNum}
                       </div>
                       <div className="min-w-0">
-                        <div className="text-sm font-extrabold text-[#084B46]">
+                        <div className="text-[15px] font-bold text-[#FFFFFF]">
                           Court {cNum}
                         </div>
-                        <div className="text-xs text-[#748079] truncate">
-                          No umpire assigned · {filled}/4 players
+                        <div className="text-[12px] text-[#B0C4D8] truncate">
+                          No umpire · {filled}/4 players
                         </div>
                       </div>
                     </div>
 
-                    <span className="inline-flex items-center gap-1.5 rounded-full bg-[#EAF0E5] px-2.5 py-1 text-[11px] font-bold text-[#0F5C62] shrink-0">
-                      <span className="size-2 rounded-full bg-[#0F5C62]" />
+                    <span className="inline-flex items-center gap-1.5 rounded-full bg-[#00E5B8]/15 border border-[#00E5B8]/50 px-2.5 py-1 text-[11px] font-bold text-[#00E5B8] shrink-0">
+                      <span className="size-1.5 rounded-full bg-[#00E5B8]" />
                       <span>Available</span>
                     </span>
                   </button>
@@ -1187,24 +1198,25 @@ export default function MatchesPage() {
         </div>
       </main>
 
-      {/* "Choose your court" Focused Modal Prompt */}
+      {/* "Choose your court" Signature DinkVision Modal */}
       {isCourtPickerOpen && !isLoadingCourts && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#084B46]/32 backdrop-blur-[4px]"
+          className="fixed inset-0 z-50 flex items-center justify-center p-3.5 bg-[#021024]/75 backdrop-blur-[12px]"
           role="dialog"
           aria-modal="true"
           aria-labelledby="choose-court-title"
         >
-          <div className="w-full max-w-[440px] rounded-[28px] border-[1.5px] border-[#E2E5DC] bg-[#FEFEFB] p-7 shadow-[0_28px_60px_-12px_rgba(8,75,70,0.28)] flex flex-col gap-5">
+          <div className="w-full max-w-[480px] rounded-[20px] border border-[#24425E] dv-top-accent bg-[#0B2239] p-6 shadow-2xl flex flex-col gap-5">
             <div className="flex items-start justify-between gap-3">
               <div>
+                <span className="dv-overline block mb-2">COURT ASSIGNMENT</span>
                 <h2
                   id="choose-court-title"
-                  className="text-2xl font-extrabold text-[#084B46] tracking-[-0.02em] m-0"
+                  className="dv-display text-[30px] leading-[1.08] text-[#FFFFFF] m-0"
                 >
-                  Choose your court
+                  CHOOSE YOUR COURT
                 </h2>
-                <p className="text-sm text-[#748079] mt-1 leading-snug">
+                <p className="text-[15px] text-[#B0C4D8] mt-3 leading-relaxed">
                   Pick an available court to join as umpire and manage the pre-match roster.
                 </p>
               </div>
@@ -1212,7 +1224,7 @@ export default function MatchesPage() {
                 <button
                   type="button"
                   onClick={() => setIsCourtPickerOpen(false)}
-                  className="flex h-8 w-8 items-center justify-center rounded-full border border-[#E2E5DC] bg-[#FAF9F5] text-[#748079] hover:text-[#084B46] cursor-pointer shrink-0"
+                  className="flex h-[40px] w-[40px] items-center justify-center rounded-[10px] border border-[#24425E] bg-[#07192B] text-[#FFFFFF] hover:border-[#00E5B8] cursor-pointer shrink-0"
                   aria-label="Close court picker"
                 >
                   <X size={16} />
@@ -1220,26 +1232,29 @@ export default function MatchesPage() {
               )}
             </div>
 
-            {/* Refined Court Dropdown */}
+            {/* Court Selector Dropdown */}
             <div ref={dropdownRef} className="flex flex-col gap-2">
+              <span className="text-[13px] font-bold uppercase tracking-[0.08em] text-[#D8E4F0]">
+                SELECT COURT
+              </span>
               <button
                 type="button"
                 aria-haspopup="listbox"
                 aria-expanded={dropdownOpen}
                 onClick={() => setDropdownOpen((o) => !o)}
-                className="flex h-[52px] w-full items-center justify-between rounded-2xl border-2 border-[#0F5C62] bg-[#FAF9F5] px-4 text-left transition-colors cursor-pointer"
+                className="flex h-[52px] w-full items-center justify-between rounded-[10px] border border-[#00E5B8] bg-[#07192B] px-4 text-left transition-colors cursor-pointer"
               >
                 {pendingDropdownCourt ? (
                   <>
-                    <span className="flex items-center gap-2.5 text-base font-extrabold text-[#084B46]">
-                      <span className="size-2.5 rounded-full bg-[#0F5C62]" />
+                    <span className="flex items-center gap-2.5 text-[16px] font-bold text-[#FFFFFF]">
+                      <span className="size-2.5 rounded-full bg-[#00E5B8]" />
                       <span>Court {pendingDropdownCourt}</span>
                     </span>
-                    <span className="flex items-center gap-2.5 text-[13px] font-bold text-[#0F5C62]">
+                    <span className="flex items-center gap-2 text-[13px] font-bold text-[#00E5B8]">
                       <span>Available</span>
                       <ChevronDown
                         size={16}
-                        className={`text-[#0F5C62] transition-transform ${
+                        className={`text-[#00E5B8] transition-transform ${
                           dropdownOpen ? 'rotate-180' : ''
                         }`}
                       />
@@ -1247,12 +1262,12 @@ export default function MatchesPage() {
                   </>
                 ) : (
                   <>
-                    <span className="text-sm font-semibold text-[#748079]">
+                    <span className="text-[15px] font-medium text-[#6C87A3]">
                       Select an available court...
                     </span>
                     <ChevronDown
                       size={16}
-                      className={`text-[#0F5C62] transition-transform ${
+                      className={`text-[#00E5B8] transition-transform ${
                         dropdownOpen ? 'rotate-180' : ''
                       }`}
                     />
@@ -1264,7 +1279,7 @@ export default function MatchesPage() {
                 <ul
                   role="listbox"
                   aria-label="Courts"
-                  className="w-full rounded-[18px] border-[1.5px] border-[#E2E5DC] bg-[#FEFEFB] p-1.5 shadow-[0_12px_28px_-6px_rgba(8,75,70,0.14)] flex flex-col gap-1 m-0 list-none"
+                  className="w-full rounded-[12px] border border-[#24425E] bg-[#07192B] p-2 flex flex-col gap-1.5 m-0 list-none"
                 >
                   {[1, 2, 3, 4].map((cNum) => {
                     const status = getCourtStatus(cNum);
@@ -1285,14 +1300,14 @@ export default function MatchesPage() {
                             if (!isAvailable) return;
                             setPendingDropdownCourt(cNum);
                           }}
-                          className={`flex h-[46px] w-full items-center justify-between rounded-xl px-3.5 text-left text-sm font-bold transition-colors border-0 ${
+                          className={`flex h-[46px] w-full items-center justify-between rounded-[10px] px-3.5 text-left text-[14.5px] font-bold transition-colors border-0 ${
                             isAvailable
                               ? isSelected
-                                ? 'bg-[#0F5C62] text-[#FEECD6] cursor-pointer'
-                                : 'bg-transparent text-[#084B46] hover:bg-[#EAF0E5] cursor-pointer'
+                                ? 'bg-[#00E5B8] text-[#031B28] cursor-pointer'
+                                : 'bg-[#0B2239]/60 text-[#FFFFFF] hover:bg-[#0B2239] cursor-pointer'
                               : isActiveMatch
-                              ? 'bg-[#FFF7ED] text-[#9A3412] cursor-not-allowed'
-                              : 'bg-[#F4F5F2] text-[#748079] opacity-65 cursor-not-allowed'
+                              ? 'bg-[#0B2239]/35 text-[#F4A261] cursor-not-allowed'
+                              : 'bg-[#0B2239]/25 text-[#6C87A3] cursor-not-allowed'
                           }`}
                         >
                           <span className="flex items-center gap-2.5">
@@ -1300,11 +1315,11 @@ export default function MatchesPage() {
                               className={`size-2 rounded-full shrink-0 ${
                                 isAvailable
                                   ? isSelected
-                                    ? 'bg-[#FEECD6]'
-                                    : 'bg-[#0F5C62]'
+                                    ? 'bg-[#031B28]'
+                                    : 'bg-[#00E5B8]'
                                   : isActiveMatch
-                                  ? 'bg-[#EA580C]'
-                                  : 'bg-[#748079]'
+                                  ? 'bg-[#F4A261]'
+                                  : 'bg-[#6C87A3]'
                               }`}
                             />
                             <span>Court {cNum}</span>
@@ -1312,18 +1327,18 @@ export default function MatchesPage() {
 
                           {isAvailable ? (
                             <span
-                              className={`text-xs font-bold ${
-                                isSelected ? 'text-[#FEECD6]' : 'text-[#0F5C62]'
+                              className={`text-[12.5px] font-bold ${
+                                isSelected ? 'text-[#031B28]' : 'text-[#00E5B8]'
                               }`}
                             >
                               Available
                             </span>
                           ) : isActiveMatch ? (
-                            <span className="text-xs font-extrabold text-[#EA580C]">
+                            <span className="text-[12.5px] font-bold text-[#F4A261]">
                               Active Match · {session?.score_team0 ?? 0}–{session?.score_team1 ?? 0}
                             </span>
                           ) : (
-                            <span className="text-xs font-bold text-[#748079]">
+                            <span className="text-[12.5px] font-semibold text-[#6C87A3]">
                               Occupied{umpireName ? ` · ${umpireName}` : ''}
                             </span>
                           )}
@@ -1349,7 +1364,7 @@ export default function MatchesPage() {
                 setIsCourtPickerOpen(false);
                 await handleJoinCourt(targetCourt);
               }}
-              className="h-[52px] w-full rounded-2xl bg-[#0F5C62] text-[#FEECD6] text-base font-extrabold hover:bg-[#085953] transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed border-0 shadow-[0_6px_16px_-4px_rgba(15,92,98,0.35)] flex items-center justify-center gap-2"
+              className="h-[54px] w-full rounded-[12px] bg-[#00E5B8] text-[#031B28] text-[16px] font-bold hover:bg-[#05DFB4] transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed border-0 flex items-center justify-center gap-2"
             >
               {isSubmitting ? (
                 <>

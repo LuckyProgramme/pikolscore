@@ -9,6 +9,7 @@ export function GameWonModal({
   winnerName,
   scores = [0, 0],
   teamNames = ['Team Omega', 'Team Alpha'],
+  courtNumber = null,
   onRematch,
   onNewMatch,
   onUndo,
@@ -24,7 +25,6 @@ export function GameWonModal({
   const overlayRef = useRef(null);
   const primaryBtnRef = useRef(null);
 
-  // Apply HTML inert to background / sibling elements while modal is open
   useEffect(() => {
     if (!open) return;
 
@@ -34,7 +34,6 @@ export function GameWonModal({
     const previouslyFocused = document.activeElement;
     const modifiedElements = [];
 
-    // Find all sibling elements at each ancestor level outside this modal overlay
     let current = overlay;
     while (
       current &&
@@ -58,14 +57,12 @@ export function GameWonModal({
       current = parent;
     }
 
-    // Auto-focus primary action inside the modal
     const focusTimer = setTimeout(() => {
       if (primaryBtnRef.current) {
         primaryBtnRef.current.focus();
       }
     }, 40);
 
-    // Trap Escape key to exit modal
     const handleKeyDown = (e) => {
       if (e.key === 'Escape') {
         e.stopPropagation();
@@ -78,7 +75,6 @@ export function GameWonModal({
       clearTimeout(focusTimer);
       window.removeEventListener('keydown', handleKeyDown);
 
-      // Restore inert state on background elements
       modifiedElements.forEach((el) => {
         el.removeAttribute('inert');
         try {
@@ -105,7 +101,7 @@ export function GameWonModal({
     title ??
     (isDraw
       ? `MATCH TIED: ${scores[0]} – ${scores[1]}`
-      : CONTENT.gameWonModal.title(resolvedWinner));
+      : `${resolvedWinner} WINS!`);
 
   const displayDetail =
     detail ??
@@ -114,6 +110,9 @@ export function GameWonModal({
       : isTimeExpired
       ? `Final Score: ${scores[0]} – ${scores[1]} (Time Expired)`
       : CONTENT.gameWonModal.finalScoreLabel(scores));
+
+  const team0Leading = Number(scores[0]) > Number(scores[1]);
+  const team1Leading = Number(scores[1]) > Number(scores[0]);
 
   return (
     <div
@@ -129,7 +128,6 @@ export function GameWonModal({
         aria-modal="true"
         aria-labelledby="victory-modal-title"
       >
-        {/* "X" button for exiting out of the modal */}
         <button
           type="button"
           className="ps-modal-close-btn"
@@ -137,13 +135,16 @@ export function GameWonModal({
           aria-label="Dismiss and review scoreboard"
           title="Review scoreboard"
         >
-          <X size={18} aria-hidden="true" />
+          <X size={16} aria-hidden="true" />
         </button>
 
         <div className="ps-victory-trophy-wrap">
-          <div className="ps-victory-trophy-glow" />
-          <Trophy className="ps-victory-trophy" size={38} strokeWidth={2.2} />
+          <Trophy className="ps-victory-trophy" size={32} strokeWidth={2.2} />
         </div>
+
+        <span className="dv-overline mb-2">
+          MATCH COMPLETE{courtNumber ? ` · COURT ${courtNumber}` : ''}
+        </span>
 
         <h2 id="victory-modal-title" className="ps-victory-title">
           {displayTitle}
@@ -151,19 +152,38 @@ export function GameWonModal({
 
         <div className="ps-victory-scoreboard">
           <div className="ps-victory-team-box">
-            <span className="ps-victory-team-name">{teamNames[0]}</span>
-            <span className="ps-victory-team-score">{scores[0]}</span>
+            <span
+              className="ps-victory-team-name"
+              style={team0Leading ? { color: '#00E5B8' } : undefined}
+            >
+              {teamNames[0]}
+            </span>
+            <span
+              className="ps-victory-team-score"
+              style={team0Leading ? { color: '#00E5B8' } : { color: '#B0C4D8' }}
+            >
+              {String(scores[0] ?? 0).padStart(2, '0')}
+            </span>
           </div>
           <div className="ps-victory-score-divider">–</div>
           <div className="ps-victory-team-box">
-            <span className="ps-victory-team-name">{teamNames[1]}</span>
-            <span className="ps-victory-team-score">{scores[1]}</span>
+            <span
+              className="ps-victory-team-name"
+              style={team1Leading ? { color: '#00E5B8' } : undefined}
+            >
+              {teamNames[1]}
+            </span>
+            <span
+              className="ps-victory-team-score"
+              style={team1Leading ? { color: '#00E5B8' } : { color: '#B0C4D8' }}
+            >
+              {String(scores[1] ?? 0).padStart(2, '0')}
+            </span>
           </div>
         </div>
 
         <p className="ps-victory-detail">{displayDetail}</p>
 
-        {/* Action buttons: Rematch, Undo Winning Point, and Match Hub / New Match */}
         <div className="ps-victory-actions flex flex-col gap-2.5 w-full">
           <button
             ref={primaryBtnRef}
@@ -171,7 +191,7 @@ export function GameWonModal({
             className="ps-victory-btn-primary"
             onClick={onRematch || onNewMatch}
           >
-            <RotateCcw size={18} aria-hidden="true" />
+            <RotateCcw size={17} aria-hidden="true" />
             <span>{CONTENT.gameWonModal.rematchButton || 'Rematch (Same Players)'}</span>
           </button>
 

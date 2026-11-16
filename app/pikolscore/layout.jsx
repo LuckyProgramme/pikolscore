@@ -1,5 +1,5 @@
 export const metadata = {
-  title: 'PikolScore | Courtside Precision',
+  title: 'DinkVision | Courtside Scoreboard',
   description: 'Tactile Pickleball Match Tracker and Scoreboard for Tablet and Mobile Landscape',
 };
 

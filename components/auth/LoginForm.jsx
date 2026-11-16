@@ -13,6 +13,7 @@ import {
   SEVEN_DAYS_MS,
 } from '@/lib/auth-session';
 import { TV_RETURN_TO_ROLE_KEY } from '@/lib/tv-pairing';
+import AmbientCourtMotif from '@/components/ui/AmbientCourtMotif';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const TWO_DAYS_MS = 2 * 24 * 60 * 60 * 1000;
@@ -39,7 +40,7 @@ function getExpiryWarningLabel(lastActiveAt) {
   const remainingMs = ts + SEVEN_DAYS_MS - Date.now();
   if (remainingMs <= 0 || remainingMs > TWO_DAYS_MS) return null;
   const days = Math.max(1, Math.ceil(remainingMs / (24 * 60 * 60 * 1000)));
-  return days === 1 ? 'Expires in 1 day' : `Expires in ${days} days`;
+  return days === 1 ? 'Expires in 1d' : `Expires in ${days}d`;
 }
 
 function formatAuthError(error, fallbackAction = 'Check your details and try again.') {
@@ -533,37 +534,24 @@ export function LoginForm({ initialMode = 'signin' }) {
   const hiddenSavedCount = Math.max(0, Math.min(5, savedAccounts.length) - 1);
 
   return (
-    <section className="bg-[#EAF0E5] px-6 sm:px-12 py-10 flex flex-col">
-      {/* Logo only at top */}
-      <div className="mb-8">
-        <Link
-          href={`/umpire${sessionSuffix}`}
-          aria-label="PikolScore"
-          className="inline-flex items-center gap-3 text-2xl font-bold tracking-tight text-[#084B46] no-underline rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0F5C62]/40"
-        >
-          <svg width="40" height="40" viewBox="0 0 40 40" aria-hidden="true" className="shrink-0">
-            <rect width="40" height="40" rx="12" fill="#0F5C62" />
-            <circle cx="20" cy="20" r="10" fill="#FEECD6" />
-            <circle cx="16.5" cy="16.5" r="1.6" fill="#084B46" />
-            <circle cx="23.5" cy="19" r="1.6" fill="#084B46" />
-            <circle cx="19" cy="24" r="1.6" fill="#084B46" />
-          </svg>
-          <span>{AUTH_CONTENT.brand}</span>
-        </Link>
-      </div>
+    <section className="relative overflow-hidden bg-[#021024] px-5 sm:px-12 py-8 sm:py-10 flex flex-col justify-between">
+      {/* Mobile-only ambient halftone pickleball motif */}
+      <AmbientCourtMotif variant="full" opacity={0.45} className="lg:hidden" />
 
-      {/* Form column */}
       <form
         action="#"
         noValidate
         onSubmit={handleSubmit}
-        className="mx-auto my-auto w-full max-w-[400px] flex flex-col gap-5"
+        className="relative z-10 mx-auto my-auto w-full max-w-[420px] flex flex-col gap-4"
       >
-        <h1 className="m-0 text-4xl leading-10 font-semibold tracking-tight text-[#084B46]">
-          {copy.heading}
-        </h1>
+        <div>
+          <span className="dv-overline block mb-2">UMPIRE PORTAL</span>
+          <h1 className="dv-display m-0 text-[36px] leading-[1.05] tracking-[0.01em] text-[#FFFFFF]">
+            {isSignUp ? 'CREATE UMPIRE ACCOUNT' : 'SIGN IN TO OFFICIATE'}
+          </h1>
+        </div>
 
-        {/* Saved-account row (hidden when none; most recent shown, "+N more" expands up to 5) */}
+        {/* Saved-account quick-switch row */}
         {!isSignUp && savedAccounts.length > 0 && (
           <div className="flex flex-col gap-2">
             {visibleSavedAccounts.map((account) => {
@@ -576,23 +564,23 @@ export function LoginForm({ initialMode = 'signin' }) {
                 return (
                   <div
                     key={account.userId}
-                    className="flex items-center justify-between gap-3 rounded-2xl bg-[#FAF9F5] p-3 min-h-14"
+                    className="flex items-center justify-between gap-3 rounded-[12px] bg-[#0B2239] border border-[#24425E] dv-top-accent p-3 min-h-[64px]"
                   >
-                    <span className="text-sm font-medium text-[#203F39]">
+                    <span className="text-[13.5px] font-medium text-[#FFFFFF]">
                       Remove {displayName} from this device?
                     </span>
-                    <div className="flex items-center gap-1.5 shrink-0">
+                    <div className="flex items-center gap-2 shrink-0">
                       <button
                         type="button"
                         onClick={() => setConfirmRemoveId(null)}
-                        className="h-9 px-3 rounded-full bg-[#EAF0E5] text-sm font-medium text-[#203F39] hover:bg-[#E2E5DC] cursor-pointer border-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0F5C62]/40"
+                        className="h-9 px-3 rounded-[10px] bg-[#07192B] border border-[#24425E] text-[13px] font-semibold text-[#FFFFFF] hover:border-[#00E5B8] cursor-pointer"
                       >
                         Cancel
                       </button>
                       <button
                         type="button"
                         onClick={() => handleConfirmRemoveSavedAccount(account)}
-                        className="h-9 px-3 rounded-full bg-[#B3412F] text-sm font-medium text-white hover:opacity-90 cursor-pointer border-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0F5C62]/40"
+                        className="h-9 px-3 rounded-[10px] bg-[#F47067] text-[13px] font-bold text-[#031B28] hover:opacity-90 cursor-pointer border-0"
                       >
                         Remove
                       </button>
@@ -604,15 +592,15 @@ export function LoginForm({ initialMode = 'signin' }) {
               return (
                 <div
                   key={account.userId}
-                  className="flex items-center gap-3 rounded-2xl bg-[#FAF9F5] hover:bg-[#FEFEFB] p-3 min-h-14 transition-colors"
+                  className="flex items-center gap-3 rounded-[12px] bg-[#0B2239] border border-[#24425E] dv-top-accent hover:border-[#00E5B8] p-3 min-h-[68px] transition-colors"
                 >
                   <button
                     type="button"
                     disabled={isSwitching || isLoading || isGoogleLoading}
                     onClick={() => handleQuickLogin(account)}
-                    className="flex flex-1 items-center gap-3 min-w-0 text-left bg-transparent border-0 p-0 cursor-pointer disabled:cursor-not-allowed rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0F5C62]/40"
+                    className="flex flex-1 items-center gap-3 min-w-0 text-left bg-transparent border-0 p-0 cursor-pointer disabled:cursor-not-allowed rounded-[10px] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#00E5B8]"
                   >
-                    <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-[#FEECD6] text-sm font-semibold text-[#084B46] overflow-hidden">
+                    <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-[#00E5B8] text-[13px] font-bold text-[#031B28] overflow-hidden">
                       {account.avatarUrl ? (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img
@@ -627,23 +615,23 @@ export function LoginForm({ initialMode = 'signin' }) {
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
-                        <span className="truncate text-base font-medium text-[#203F39]">
+                        <span className="truncate text-[15px] font-bold text-[#FFFFFF]">
                           {displayName}
                         </span>
                         {expiryLabel && (
-                          <span className="shrink-0 rounded-full bg-[#FEECD6] px-2 py-0.5 text-xs font-medium text-[#084B46]">
+                          <span className="shrink-0 rounded-full border border-[#F4A261]/60 bg-[#F4A261]/15 px-2 py-0.5 text-[10.5px] font-bold text-[#F4A261]">
                             {expiryLabel}
                           </span>
                         )}
                       </div>
-                      <div className="truncate text-sm text-[#5F6B65]">
+                      <div className="truncate text-[13px] text-[#B0C4D8]">
                         {isThisSwitching ? 'Signing in…' : maskEmail(account.email)}
                       </div>
                     </div>
                     {isThisSwitching ? (
-                      <Loader2 size={18} className="shrink-0 animate-spin text-[#0F5C62]" />
+                      <Loader2 size={18} className="shrink-0 animate-spin text-[#00E5B8]" />
                     ) : (
-                      <ChevronRight size={18} className="shrink-0 text-[#5F6B65]" aria-hidden="true" />
+                      <ChevronRight size={18} className="shrink-0 text-[#B0C4D8]" aria-hidden="true" />
                     )}
                   </button>
 
@@ -652,7 +640,7 @@ export function LoginForm({ initialMode = 'signin' }) {
                     disabled={isSwitching}
                     onClick={() => setConfirmRemoveId(account.userId)}
                     aria-label="Remove from this device"
-                    className="size-11 shrink-0 grid place-items-center rounded-full bg-transparent text-[#5F6B65] hover:bg-[#EAF0E5] hover:text-[#203F39] border-0 cursor-pointer transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0F5C62]/40"
+                    className="size-10 shrink-0 grid place-items-center rounded-[10px] bg-transparent text-[#6C87A3] hover:bg-[#07192B] hover:text-[#FFFFFF] border-0 cursor-pointer transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#00E5B8]"
                   >
                     <X size={16} aria-hidden="true" />
                   </button>
@@ -664,9 +652,9 @@ export function LoginForm({ initialMode = 'signin' }) {
               <button
                 type="button"
                 onClick={() => setShowAllSaved(true)}
-                className="self-start text-sm font-medium text-[#0F5C62] bg-transparent border-0 px-1 py-0.5 cursor-pointer hover:underline underline-offset-4 rounded focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0F5C62]/40"
+                className="self-start text-[13px] font-semibold text-[#00E5B8] bg-transparent border-0 px-0.5 py-0.5 cursor-pointer hover:underline underline-offset-4"
               >
-                +{hiddenSavedCount} more
+                +{hiddenSavedCount} more saved account{hiddenSavedCount > 1 ? 's' : ''}
               </button>
             )}
           </div>
@@ -674,8 +662,11 @@ export function LoginForm({ initialMode = 'signin' }) {
 
         {/* Sign-up Name Field */}
         {isSignUp && (
-          <div className="flex flex-col gap-1.5">
-            <label htmlFor="full-name" className="text-sm font-medium text-[#203F39]">
+          <div className="flex flex-col gap-2">
+            <label
+              htmlFor="full-name"
+              className="text-[13px] font-bold uppercase tracking-[0.08em] text-[#D8E4F0]"
+            >
               {fields.fullName.label}
             </label>
             <input
@@ -692,10 +683,10 @@ export function LoginForm({ initialMode = 'signin' }) {
               }}
               aria-invalid={Boolean(nameError)}
               aria-describedby={nameError ? 'name-error' : undefined}
-              className="h-12 w-full rounded-full bg-[#FAF9F5] border-0 px-5 text-base text-[#203F39] placeholder:text-[#5F6B65] focus:outline-none focus:ring-2 focus:ring-[#0F5C62]/40"
+              className="h-[52px] w-full rounded-[10px] bg-[#07192B] border border-[#24425E] px-4 text-[17px] font-medium text-[#FFFFFF] placeholder:text-[#6C87A3] focus:outline-none focus:border-[#00E5B8]"
             />
             {nameError && (
-              <p id="name-error" role="alert" className="m-0 text-sm text-[#B3412F]">
+              <p id="name-error" role="alert" className="m-0 text-[13.5px] text-[#F47067]">
                 {nameError}
               </p>
             )}
@@ -703,8 +694,11 @@ export function LoginForm({ initialMode = 'signin' }) {
         )}
 
         {/* Email Field */}
-        <div className="flex flex-col gap-1.5">
-          <label htmlFor="email" className="text-sm font-medium text-[#203F39]">
+        <div className="flex flex-col gap-2">
+          <label
+            htmlFor="email"
+            className="text-[13px] font-bold uppercase tracking-[0.08em] text-[#D8E4F0]"
+          >
             {fields.email.label}
           </label>
           <input
@@ -722,26 +716,29 @@ export function LoginForm({ initialMode = 'signin' }) {
             }}
             aria-invalid={Boolean(emailError)}
             aria-describedby={emailError ? 'email-error' : undefined}
-            className="h-12 w-full rounded-full bg-[#FAF9F5] border-0 px-5 text-base text-[#203F39] placeholder:text-[#5F6B65] focus:outline-none focus:ring-2 focus:ring-[#0F5C62]/40"
+            className="h-[52px] w-full rounded-[10px] bg-[#07192B] border border-[#24425E] px-4 text-[17px] font-medium text-[#FFFFFF] placeholder:text-[#6C87A3] focus:outline-none focus:border-[#00E5B8]"
           />
           {emailError && (
-            <p id="email-error" role="alert" className="m-0 text-sm text-[#B3412F]">
+            <p id="email-error" role="alert" className="m-0 text-[13.5px] text-[#F47067]">
               {emailError}
             </p>
           )}
         </div>
 
         {/* Password Field */}
-        <div className="flex flex-col gap-1.5">
+        <div className="flex flex-col gap-2">
           <div className="flex items-baseline justify-between">
-            <label htmlFor="password" className="text-sm font-medium text-[#203F39]">
+            <label
+              htmlFor="password"
+              className="text-[13px] font-bold uppercase tracking-[0.08em] text-[#D8E4F0]"
+            >
               {fields.password.label}
             </label>
             {!isSignUp && (
               <a
                 href="#forgot"
                 onClick={handleForgotPassword}
-                className="text-sm font-medium text-[#0F5C62] no-underline hover:underline underline-offset-4 rounded focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0F5C62]/40"
+                className="text-[13px] font-semibold text-[#00E5B8] no-underline hover:underline underline-offset-4"
               >
                 {AUTH_CONTENT.signIn.forgotPassword}
               </a>
@@ -755,7 +752,7 @@ export function LoginForm({ initialMode = 'signin' }) {
               type={showPassword ? 'text' : 'password'}
               autoComplete={isSignUp ? 'new-password' : 'current-password'}
               placeholder={
-                isSignUp ? fields.password.signUpPlaceholder : fields.password.signInPlaceholder
+                isSignUp ? fields.password.signUpPlaceholder : 'Enter password'
               }
               required
               value={password}
@@ -765,20 +762,20 @@ export function LoginForm({ initialMode = 'signin' }) {
               }}
               aria-invalid={Boolean(passwordError)}
               aria-describedby={passwordError ? 'password-error' : undefined}
-              className="h-12 w-full rounded-full bg-[#FAF9F5] border-0 pl-5 pr-12 text-base text-[#203F39] placeholder:text-[#5F6B65] focus:outline-none focus:ring-2 focus:ring-[#0F5C62]/40"
+              className="h-[52px] w-full rounded-[10px] bg-[#07192B] border border-[#24425E] pl-4 pr-12 text-[17px] font-medium text-[#FFFFFF] placeholder:text-[#6C87A3] focus:outline-none focus:border-[#00E5B8]"
             />
             <button
               type="button"
               aria-label={showPassword ? 'Hide password' : 'Show password'}
               aria-pressed={showPassword}
               onClick={() => setShowPassword((prev) => !prev)}
-              className="absolute right-1 size-11 grid place-items-center rounded-full border-0 bg-transparent text-[#5F6B65] hover:text-[#203F39] cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0F5C62]/40"
+              className="absolute right-1.5 size-10 grid place-items-center rounded-[10px] border-0 bg-transparent text-[#6C87A3] hover:text-[#FFFFFF] cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[#00E5B8]"
             >
               {showPassword ? <EyeOff size={18} aria-hidden="true" /> : <Eye size={18} aria-hidden="true" />}
             </button>
           </div>
           {passwordError && (
-            <p id="password-error" role="alert" className="m-0 text-sm text-[#B3412F]">
+            <p id="password-error" role="alert" className="m-0 text-[13.5px] text-[#F47067]">
               {passwordError}
             </p>
           )}
@@ -786,8 +783,11 @@ export function LoginForm({ initialMode = 'signin' }) {
 
         {/* Sign-up Confirm Password Field */}
         {isSignUp && (
-          <div className="flex flex-col gap-1.5">
-            <label htmlFor="confirm-password" className="text-sm font-medium text-[#203F39]">
+          <div className="flex flex-col gap-2">
+            <label
+              htmlFor="confirm-password"
+              className="text-[13px] font-bold uppercase tracking-[0.08em] text-[#D8E4F0]"
+            >
               {fields.confirmPassword.label}
             </label>
             <input
@@ -804,10 +804,10 @@ export function LoginForm({ initialMode = 'signin' }) {
               }}
               aria-invalid={Boolean(confirmPasswordError)}
               aria-describedby={confirmPasswordError ? 'confirm-password-error' : undefined}
-              className="h-12 w-full rounded-full bg-[#FAF9F5] border-0 px-5 text-base text-[#203F39] placeholder:text-[#5F6B65] focus:outline-none focus:ring-2 focus:ring-[#0F5C62]/40"
+              className="h-[52px] w-full rounded-[10px] bg-[#07192B] border border-[#24425E] px-4 text-[17px] font-medium text-[#FFFFFF] placeholder:text-[#6C87A3] focus:outline-none focus:border-[#00E5B8]"
             />
             {confirmPasswordError && (
-              <p id="confirm-password-error" role="alert" className="m-0 text-sm text-[#B3412F]">
+              <p id="confirm-password-error" role="alert" className="m-0 text-[13.5px] text-[#F47067]">
                 {confirmPasswordError}
               </p>
             )}
@@ -815,16 +815,16 @@ export function LoginForm({ initialMode = 'signin' }) {
         )}
 
         {statusMessage && (
-          <p role="status" className="m-0 text-sm text-[#084B46]">
+          <p role="status" className="m-0 text-[13.5px] font-medium text-[#00E5B8]">
             {statusMessage}
           </p>
         )}
 
-        {/* Primary Sign in Button */}
+        {/* Primary Sign in Button (#00E5B8 bg + #031B28 text) */}
         <button
           type="submit"
           disabled={isLoading || isGoogleLoading || isSwitching}
-          className="h-12 w-full rounded-full border-0 bg-[#0F5C62] font-medium text-base text-white hover:bg-[#084B46] transition-colors flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0F5C62]/40"
+          className="h-[54px] w-full rounded-[12px] border-0 bg-[#00E5B8] font-bold text-[16px] text-[#031B28] hover:bg-[#05DFB4] transition-colors flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-[#00E5B8] focus-visible:ring-offset-2 focus-visible:ring-offset-[#021024]"
         >
           {isLoading && <Loader2 size={18} className="animate-spin" aria-hidden="true" />}
           <span>{isLoading ? copy.submitting : copy.submit}</span>
@@ -832,20 +832,20 @@ export function LoginForm({ initialMode = 'signin' }) {
 
         {/* Hairline divider with "or" */}
         <div className="flex items-center gap-3" aria-hidden="true">
-          <div className="h-px flex-1 bg-[#E2E5DC]" />
-          <span className="text-sm text-[#5F6B65]">or</span>
-          <div className="h-px flex-1 bg-[#E2E5DC]" />
+          <div className="h-px flex-1 bg-[#11263C]" />
+          <span className="text-[13px] text-[#6C87A3]">or</span>
+          <div className="h-px flex-1 bg-[#11263C]" />
         </div>
 
-        {/* Continue with Google */}
+        {/* Continue with Google (Secondary Outline) */}
         <button
           type="button"
           onClick={handleGoogleSignIn}
           disabled={isLoading || isGoogleLoading || isSwitching}
-          className="h-12 w-full rounded-full border-0 bg-[#FEFEFB] text-base font-medium text-[#203F39] hover:bg-white transition-colors flex items-center justify-center gap-3 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0F5C62]/40"
+          className="h-[54px] w-full rounded-[12px] border border-[#24425E] bg-[#07192B] text-[16px] font-bold text-[#FFFFFF] hover:border-[#00E5B8] hover:bg-[#0B2239] transition-colors flex items-center justify-center gap-3 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-[#00E5B8]"
         >
           {isGoogleLoading ? (
-            <Loader2 size={18} className="animate-spin text-[#0F5C62]" aria-hidden="true" />
+            <Loader2 size={18} className="animate-spin text-[#00E5B8]" aria-hidden="true" />
           ) : (
             <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
               <path
@@ -869,9 +869,8 @@ export function LoginForm({ initialMode = 'signin' }) {
           <span>{isGoogleLoading ? 'Connecting to Google…' : 'Continue with Google'}</span>
         </button>
 
-
-        {/* Footer */}
-        <p className="m-0 text-center text-sm text-[#5F6B65]">
+        {/* Footer prompt */}
+        <p className="m-0 pt-1 text-center text-[13.5px] text-[#B0C4D8]">
           {copy.footerPrompt}
           <Link
             href="/umpire"
@@ -879,12 +878,16 @@ export function LoginForm({ initialMode = 'signin' }) {
               e.preventDefault();
               switchMode(isSignUp ? 'signin' : 'signup');
             }}
-            className="font-semibold text-[#0F5C62] no-underline underline-offset-4 hover:underline rounded focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0F5C62]/40"
+            className="font-bold text-[#00E5B8] no-underline underline-offset-4 hover:underline"
           >
             {copy.footerLink}
           </Link>
         </p>
       </form>
+
+      <div className="relative z-10 text-right lg:hidden mt-6">
+        <span className="text-[12px] text-[#8CA2B8]">Umpire Console · v0.5.33</span>
+      </div>
     </section>
   );
 }

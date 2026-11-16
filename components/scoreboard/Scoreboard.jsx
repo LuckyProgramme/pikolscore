@@ -14,6 +14,7 @@ import MatchLog from './MatchLog';
 import GameWonModal from './GameWonModal';
 import VoiceDebugOverlay from './VoiceDebugOverlay';
 import ProjectToScreenModal from './ProjectToScreenModal';
+import AmbientCourtMotif from '../ui/AmbientCourtMotif';
 import { VOICE_CONFIG } from '@/config/voice';
 import { supabase } from '@/config/supabase';
 import { PickleballEngine } from '@/lib/engine';
@@ -561,14 +562,16 @@ export function Scoreboard() {
 
   return (
     <div className="ps-shell">
+      <AmbientCourtMotif variant="glow" />
+
       {/* 1. Subtle Spectator / Player Viewer Top Banner */}
       {isGuest && (
         <div
           role="status"
           aria-live="polite"
-          className="flex items-center justify-center gap-2 bg-[#FAF9F5] border-b border-[#E2E5DC] px-4 py-2 text-center text-[13px] font-semibold text-[#084B46] tracking-wide"
+          className="relative z-20 flex items-center justify-center gap-2 bg-[#07192B] border-b border-[#11263C] px-3 sm:px-4 py-1.5 sm:py-2 text-center text-[11.5px] sm:text-[13px] font-semibold text-[#B0C4D8] tracking-wide leading-snug"
         >
-          <Eye size={15} className="text-[#0F5C62] shrink-0" aria-hidden="true" />
+          <Eye size={15} className="text-[#00E5B8] shrink-0" aria-hidden="true" />
           <span>
             {profile?.role === 'player'
               ? `Live Court Session — Connected as ${profile.full_name || userEmail || 'Player'}`
@@ -582,16 +585,16 @@ export function Scoreboard() {
         <div
           role="status"
           aria-live="polite"
-          className="flex items-center justify-between gap-3 bg-[#EAF0E5] border-b border-[#0F5C62]/40 px-4 py-2 text-[13px] font-bold text-[#084B46]"
+          className="relative z-20 flex items-center justify-between gap-3 bg-[#0B2239] border-b border-[#00E5B8]/60 px-4 py-2 text-[13px] font-bold text-[#FFFFFF]"
         >
           <div className="flex items-center gap-2">
-            <Tv size={15} className="text-[#0F5C62] shrink-0" aria-hidden="true" />
+            <Tv size={15} className="text-[#00E5B8] shrink-0" aria-hidden="true" />
             <span>{tvBannerMessage}</span>
           </div>
           <button
             type="button"
             onClick={() => setTvBannerMessage('')}
-            className="p-1 text-[#084B46] hover:text-[#0F5C62] rounded bg-transparent border-0 cursor-pointer"
+            className="p-1 text-[#B0C4D8] hover:text-[#FFFFFF] rounded bg-transparent border-0 cursor-pointer"
             aria-label="Dismiss TV pairing notice"
           >
             <X size={15} />
@@ -604,16 +607,16 @@ export function Scoreboard() {
         <div
           role="alert"
           aria-live="assertive"
-          className="flex items-center justify-between gap-3 bg-[#FEECD6] border-b border-[#E2E5DC] px-4 py-2 text-[13px] font-medium text-[#203F39]"
+          className="relative z-20 flex items-center justify-between gap-3 bg-[#0B2239] border-b border-[#F4A261]/60 px-4 py-2 text-[13px] font-medium text-[#FFFFFF]"
         >
           <div className="flex items-center gap-2">
-            <AlertTriangle size={16} className="text-[#BA1A1A] shrink-0" aria-hidden="true" />
+            <AlertTriangle size={16} className="text-[#F4A261] shrink-0" aria-hidden="true" />
             <span>{sync.toastMessage}</span>
           </div>
           <button
             type="button"
             onClick={sync.clearToast}
-            className="p-1 text-[#748079] hover:text-[#203F39] rounded"
+            className="p-1 text-[#B0C4D8] hover:text-[#FFFFFF] rounded bg-transparent border-0 cursor-pointer"
             aria-label="Dismiss alert"
           >
             <X size={15} />
@@ -657,10 +660,10 @@ export function Scoreboard() {
               <div
                 role="region"
                 aria-label="Match complete actions"
-                className="flex flex-none flex-wrap items-center justify-between gap-3 rounded-2xl border border-teal bg-pale-sage px-5 py-3 shadow-sm"
+                className="flex flex-none flex-wrap items-center justify-between gap-3 rounded-[14px] border border-[#24425E] dv-top-accent bg-[#0B2239] px-5 py-3 shadow-lg"
               >
-                <div className="flex items-center gap-2.5 text-base font-bold text-dark-teal">
-                  <Trophy size={20} className="shrink-0 text-teal" aria-hidden="true" />
+                <div className="flex items-center gap-2.5 text-[15px] font-bold text-[#FFFFFF]">
+                  <Trophy size={20} className="shrink-0 text-[#00E5B8]" aria-hidden="true" />
                   <span>
                     {winnerIdx === null
                       ? `Match tied · Final score ${scores[0]}–${scores[1]}`
@@ -675,7 +678,7 @@ export function Scoreboard() {
                     type="button"
                     disabled={isGuest}
                     onClick={() => !isGuest && setGameWonModalOpen(true)}
-                    className="inline-flex min-h-[44px] items-center justify-center rounded-xl border border-teal bg-ivory px-4 text-sm font-bold text-dark-teal hover:bg-teal/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal cursor-pointer"
+                    className="inline-flex h-[40px] items-center justify-center rounded-[10px] border border-[#24425E] bg-[#07192B] px-4 text-[13px] font-semibold text-[#FFFFFF] hover:border-[#00E5B8] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#00E5B8] cursor-pointer"
                   >
                     View summary
                   </button>
@@ -683,7 +686,7 @@ export function Scoreboard() {
                     type="button"
                     disabled={isGuest}
                     onClick={handleGoToMatches}
-                    className="inline-flex min-h-[44px] items-center justify-center rounded-xl bg-teal px-4 text-sm font-bold text-cream hover:bg-forest-teal focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal cursor-pointer"
+                    className="inline-flex h-[40px] items-center justify-center rounded-[10px] bg-[#00E5B8] px-4 text-[13px] font-bold text-[#031B28] hover:bg-[#05DFB4] border-0 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#00E5B8] cursor-pointer"
                   >
                     New match
                   </button>
@@ -748,16 +751,17 @@ export function Scoreboard() {
             key={rallyToast.id}
             role="status"
             aria-live="polite"
-            className="fixed bottom-4 left-1/2 z-30 flex -translate-x-1/2 items-center gap-3 rounded-full border border-teal/30 bg-dark-teal px-5 py-2.5 text-base font-semibold text-ivory shadow-xl"
+            className="fixed bottom-4 left-1/2 z-30 flex -translate-x-1/2 items-center gap-3 rounded-full border border-[#00E5B8] bg-[#0B2239] pl-4 pr-2 py-1.5 text-[14px] font-bold text-[#FFFFFF] shadow-2xl"
           >
+            <span className="h-2 w-2 rounded-full bg-[#00E5B8] shrink-0" aria-hidden="true" />
             <span>{rallyToast.message}</span>
             {canUndo && (
               <button
                 type="button"
                 onClick={handleUndo}
-                className="inline-flex items-center gap-1.5 rounded-full bg-cream px-3 py-1 text-sm font-bold text-dark-teal hover:bg-ivory focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cream cursor-pointer"
+                className="inline-flex items-center gap-1.5 rounded-full bg-[#00E5B8] px-3 py-1 text-[12.5px] font-bold text-[#031B28] hover:bg-[#05DFB4] border-0 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#00E5B8] cursor-pointer"
               >
-                <Undo2 size={14} aria-hidden="true" />
+                <Undo2 size={13} aria-hidden="true" />
                 <span>Undo</span>
               </button>
             )}
@@ -789,6 +793,7 @@ export function Scoreboard() {
           winnerName={state?.winnerName}
           scores={scores}
           teamNames={teamNames}
+          courtNumber={resolvedCourtNumber}
           canUndo={canUndo && !isTimeExpired}
           isDraw={Boolean(state?.isDraw)}
           isTimeExpired={isTimeExpired || timer.status === 'expired'}
@@ -819,19 +824,20 @@ export function Scoreboard() {
       {/* 6. Abandon Match Confirmation Dialog */}
       {showAbandonModal && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-deep-green/75 backdrop-blur-sm"
+          className="fixed inset-0 z-50 flex items-center justify-center p-3.5 bg-[#021024]/75 backdrop-blur-[12px]"
           role="dialog"
           aria-modal="true"
           aria-labelledby="abandon-modal-title"
         >
-          <div className="w-full max-w-md bg-ivory rounded-3xl p-6 border border-line shadow-2xl text-center">
-            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-error/10 text-error mb-4">
+          <div className="w-full max-w-[440px] bg-[#0B2239] rounded-[20px] p-6 border border-[#24425E] dv-top-accent-error shadow-2xl text-center">
+            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-[12px] bg-[#F47067]/15 border border-[#F47067]/40 text-[#F47067] mb-4">
               <AlertTriangle size={24} aria-hidden="true" />
             </div>
-            <h3 id="abandon-modal-title" className="text-xl font-bold text-dark-teal mb-2">
-              Abandon this match?
+            <span className="dv-overline block text-[#F47067] mb-1.5">MATCH TERMINATION</span>
+            <h3 id="abandon-modal-title" className="dv-display text-[30px] leading-[1.08] text-[#FFFFFF] mb-3">
+              ABANDON THIS MATCH?
             </h3>
-            <p className="text-base text-[#384640] mb-6 leading-relaxed">
+            <p className="text-[15px] text-[#B0C4D8] mb-6 leading-relaxed">
               Abandoning this match will end the match, remove all players from the court, and free the court for a new match. This action cannot be undone.
             </p>
             <div className="flex gap-3">
@@ -839,14 +845,14 @@ export function Scoreboard() {
                 ref={abandonCancelBtnRef}
                 type="button"
                 onClick={() => setShowAbandonModal(false)}
-                className="flex-1 min-h-[48px] rounded-full border border-line bg-off-white text-dark-teal font-bold text-base hover:bg-pale-sage focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal cursor-pointer"
+                className="flex-1 h-[54px] rounded-[12px] border border-[#24425E] bg-[#07192B] text-[#FFFFFF] font-bold text-[16px] hover:border-[#00E5B8] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#00E5B8] cursor-pointer"
               >
                 Cancel
               </button>
               <button
                 type="button"
                 onClick={handleAbandon}
-                className="flex-1 min-h-[48px] rounded-full bg-error text-white font-bold text-base hover:bg-red-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-error cursor-pointer border-0"
+                className="flex-1 h-[54px] rounded-[12px] bg-[#F47067] text-[#031B28] font-bold text-[16px] hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#F47067] cursor-pointer border-0"
               >
                 Abandon match
               </button>
