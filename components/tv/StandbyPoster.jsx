@@ -1,7 +1,14 @@
 'use client';
 
-import { useState, useEffect, useId } from 'react';
-import { splitPlayerName, getPlayerInitials } from '@/lib/standby-poster';
+import { useState, useEffect, useId, useMemo, useRef, useCallback } from 'react';
+import {
+  splitPlayerName,
+  getPlayerInitials,
+  STANDBY_SLOT_ORDER,
+  MOTION_FRAME_INTERVAL_MS,
+  MOTION_INTER_PLAYER_PAUSE_MS,
+  getNextSpotlightSlot,
+} from '@/lib/standby-poster';
 
 export { splitPlayerName, getPlayerInitials };
 
@@ -54,6 +61,49 @@ export const STANDBY_POSTER_FIXTURES = {
     teamB: [
       { name: 'Madonna', cutoutUrl: null },
       { name: 'Rico Lim', cutoutUrl: FIXTURE_CUTOUT_URL },
+    ],
+  },
+  motion: {
+    courtNumber: 2,
+    matchType: 'Doubles',
+    teamA: [
+      {
+        id: 'motion-a1',
+        name: 'Miguel Reyes',
+        cutoutUrls: [
+          `${FIXTURE_CUTOUT_URL}?f=a1`,
+          `${FIXTURE_CUTOUT_URL}?f=a2`,
+          `${FIXTURE_CUTOUT_URL}?f=a3`,
+          `${FIXTURE_CUTOUT_URL}?f=a4`,
+        ],
+      },
+      {
+        id: 'motion-a2',
+        name: 'Paolo Dizon',
+        cutoutUrls: [
+          `${FIXTURE_CUTOUT_URL}?f=b1`,
+          `${FIXTURE_CUTOUT_URL}?f=b2`,
+          `${FIXTURE_CUTOUT_URL}?f=b3`,
+          `${FIXTURE_CUTOUT_URL}?f=b4`,
+        ],
+      },
+    ],
+    teamB: [
+      {
+        id: 'motion-b1',
+        name: 'Jun Bautista',
+        cutoutUrls: [`${FIXTURE_CUTOUT_URL}?f=c1`],
+      },
+      {
+        id: 'motion-b2',
+        name: 'Rico Lim',
+        cutoutUrls: [
+          `${FIXTURE_CUTOUT_URL}?f=d1`,
+          `${FIXTURE_CUTOUT_URL}?f=d2`,
+          `${FIXTURE_CUTOUT_URL}?f=d3`,
+          `${FIXTURE_CUTOUT_URL}?f=d4`,
+        ],
+      },
     ],
   },
 };
@@ -248,102 +298,239 @@ const BOTTOM_FADE_MASK = {
 };
 
 /**
- * Renders one player avatar slot (front or back for Team A or Team B).
- * Preloads and decodes new cutout images before revealing them with a 400ms rise-and-fade
- * entrance (respecting prefers-reduced-motion). Falls back to the placeholder silhouette +
- * team-colored initials badge while decoding, when no cutout exists, or if loading fails.
+ * Preloads an image URL offscreen and awaits decode() so swap-in never flashes partial paints.
  */
-export function PlayerSlot({ team = 'A', position = 'front', player = null }) {
-  const [imageState, setImageState] = useState({
-    readyUrl: null,
-    failedUrl: null,
-  });
+function preloadAndDecodeImage(url) {
+  if (!url || typeof window === 'undefined') {
+    return Promise.resolve(false);
+  }
+  return new Promise((resolve) => {
+    const img = new window.Image();
+    img.decoding = 'async';
+    let settled = false;
 
+    const finish = async () => {
+      if (settled) return;
+      settled = true;
+      try {
+        if (typeof img.decode === 'function') {
+          await img.decode();
+        }
+        resolve(img.naturalWidth > 0);
+      } catch {
+        resolve(Boolean(img.complete && img.naturalWidth > 0));
+      }
+    };
+
+    img.onload = finish;
+    img.onerror = () => {
+      if (settled) return;
+      settled = true;
+      resolve(false);
+    };
+    img.src = url;
+
+    if (img.complete && img.naturalWidth > 0) {
+      finish();
+    }
+  });
+}
+
+/**
+ * Renders one player avatar slot (front or back for Team A or Team B).
+ * - Immediately preloads and decodes Frame 0 (Idle) with a 400ms rise-and-fade entrance.
+ * - Preloads motion frames (1..3) once allowed by the sequential loader, keeping all decoded
+ *   layers mounted so stop-motion frame transitions happen with zero decode or paint flicker.
+ * - Falls back to placeholder silhouette + team-colored initials badge while loading or on error.
+ */
+export function PlayerSlot({
+  team = 'A',
+  position = 'front',
+  player = null,
+  slotSignature = '',
+  activeFrameIndex = 0,
+  allowMotionPreload = false,
+  onSlotReadyChange,
+  onMotionPreloadDone,
+}) {
   const slotKey = `${team}-${position}`;
   const layoutClass = SLOT_LAYOUT[slotKey] || SLOT_LAYOUT['A-front'];
 
   const playerName = player?.name ? String(player.name).trim() : '';
   const hasPlayer = Boolean(playerName);
-  const cutoutUrl =
-    hasPlayer && player?.cutoutUrl ? String(player.cutoutUrl).trim() : null;
+
+  const rawFramesKey = !hasPlayer
+    ? ''
+    : (Array.isArray(player?.cutoutUrls)
+        ? player.cutoutUrls
+        : player?.cutoutUrl
+        ? [player.cutoutUrl]
+        : []
+      )
+        .filter((u) => typeof u === 'string' && u.trim())
+        .map((u) => u.trim())
+        .join('|');
+
+  const frameUrls = useMemo(
+    () => (rawFramesKey ? rawFramesKey.split('|') : []),
+    [rawFramesKey]
+  );
+
+  const primaryUrl = frameUrls[0] || null;
+  const effectiveSignature =
+    slotSignature || `${playerName}|${rawFramesKey}`;
+
+  const [frameState, setFrameState] = useState({
+    primaryUrl: null,
+    decodedUrls: [],
+  });
+
+  const callbacksRef = useRef({ onSlotReadyChange, onMotionPreloadDone });
+  callbacksRef.current = { onSlotReadyChange, onMotionPreloadDone };
+
+  // Phase 1: Always preload & decode Frame 0 (Idle) first
+  useEffect(() => {
+    let cancelled = false;
+    const sig = effectiveSignature;
+
+    if (!hasPlayer || !primaryUrl) {
+      setFrameState({ primaryUrl: null, decodedUrls: [] });
+      callbacksRef.current.onSlotReadyChange?.(slotKey, {
+        signature: sig,
+        idleSettled: true,
+        decodedCount: 0,
+      });
+      callbacksRef.current.onMotionPreloadDone?.(slotKey, sig);
+      return undefined;
+    }
+
+    setFrameState((prev) =>
+      prev.primaryUrl === primaryUrl
+        ? prev
+        : { primaryUrl: null, decodedUrls: [] }
+    );
+
+    preloadAndDecodeImage(primaryUrl).then((ok) => {
+      if (cancelled) return;
+      if (ok) {
+        setFrameState((prev) => ({
+          primaryUrl,
+          decodedUrls:
+            prev.primaryUrl === primaryUrl && prev.decodedUrls.length > 0
+              ? prev.decodedUrls
+              : [primaryUrl],
+        }));
+        callbacksRef.current.onSlotReadyChange?.(slotKey, {
+          signature: sig,
+          idleSettled: true,
+          decodedCount: 1,
+        });
+      } else {
+        setFrameState({ primaryUrl: null, decodedUrls: [] });
+        callbacksRef.current.onSlotReadyChange?.(slotKey, {
+          signature: sig,
+          idleSettled: true,
+          decodedCount: 0,
+        });
+        callbacksRef.current.onMotionPreloadDone?.(slotKey, sig);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [hasPlayer, primaryUrl, slotKey, effectiveSignature]);
+
+  // Phase 2: Once idle frames settle & spotlight order reaches this slot, preload extra frames
+  const isIdleDecoded = Boolean(primaryUrl && frameState.primaryUrl === primaryUrl);
 
   useEffect(() => {
-    if (!cutoutUrl || typeof window === 'undefined') {
-      setImageState({ readyUrl: null, failedUrl: null });
+    if (!hasPlayer || !allowMotionPreload || !isIdleDecoded) {
+      return undefined;
+    }
+
+    const sig = effectiveSignature;
+
+    if (frameUrls.length <= 1) {
+      callbacksRef.current.onSlotReadyChange?.(slotKey, {
+        signature: sig,
+        idleSettled: true,
+        decodedCount: 1,
+      });
+      callbacksRef.current.onMotionPreloadDone?.(slotKey, sig);
       return undefined;
     }
 
     let cancelled = false;
-    setImageState((prev) => ({
-      readyUrl: prev.readyUrl === cutoutUrl ? cutoutUrl : null,
-      failedUrl: null,
-    }));
 
-    const img = new window.Image();
-    img.decoding = 'async';
-
-    const finalizeDecode = async () => {
-      try {
-        if (typeof img.decode === 'function') {
-          await img.decode();
-        }
+    const loadExtraFrames = async () => {
+      const validFrames = [frameUrls[0]];
+      for (let i = 1; i < frameUrls.length; i += 1) {
+        const ok = await preloadAndDecodeImage(frameUrls[i]);
         if (cancelled) return;
-        if (img.naturalWidth > 0) {
-          setImageState({ readyUrl: cutoutUrl, failedUrl: null });
-        } else {
-          setImageState({ readyUrl: null, failedUrl: cutoutUrl });
-        }
-      } catch {
-        if (cancelled) return;
-        if (img.complete && img.naturalWidth > 0) {
-          setImageState({ readyUrl: cutoutUrl, failedUrl: null });
-        } else {
-          setImageState({ readyUrl: null, failedUrl: cutoutUrl });
+        if (ok) {
+          validFrames.push(frameUrls[i]);
         }
       }
+
+      if (cancelled) return;
+      setFrameState({
+        primaryUrl: frameUrls[0],
+        decodedUrls: validFrames,
+      });
+      callbacksRef.current.onSlotReadyChange?.(slotKey, {
+        signature: sig,
+        idleSettled: true,
+        decodedCount: validFrames.length,
+      });
+      callbacksRef.current.onMotionPreloadDone?.(slotKey, sig);
     };
 
-    img.onload = finalizeDecode;
-    img.onerror = () => {
-      if (!cancelled) {
-        setImageState({ readyUrl: null, failedUrl: cutoutUrl });
-      }
-    };
-    img.src = cutoutUrl;
-
-    if (img.complete && img.naturalWidth > 0) {
-      finalizeDecode();
-    }
+    loadExtraFrames();
 
     return () => {
       cancelled = true;
-      img.onload = null;
-      img.onerror = null;
     };
-  }, [cutoutUrl]);
+  }, [hasPlayer, allowMotionPreload, isIdleDecoded, frameUrls, slotKey, effectiveSignature]);
 
-  const isDecoded = Boolean(
-    cutoutUrl &&
-      imageState.readyUrl === cutoutUrl &&
-      imageState.failedUrl !== cutoutUrl
-  );
+  const decodedUrls =
+    hasPlayer && frameState.primaryUrl === primaryUrl
+      ? frameState.decodedUrls
+      : [];
+  const isPrimaryReady = decodedUrls.length > 0;
+  const displayIdx =
+    activeFrameIndex >= 0 && activeFrameIndex < decodedUrls.length
+      ? activeFrameIndex
+      : 0;
+
   const isFront = position === 'front';
   const isTeamA = team === 'A';
+  const playerKey = `${player?.id || playerName}-${primaryUrl || 'none'}`;
 
   return (
     <div
       className={`absolute ${layoutClass} pointer-events-none select-none`}
       data-slot={slotKey}
+      data-frame={isPrimaryReady ? displayIdx : undefined}
     >
-      {hasPlayer && isDecoded ? (
-        <img
-          key={`${playerName}-${cutoutUrl}`}
-          src={cutoutUrl}
-          alt={playerName}
-          onError={() => setImageState({ readyUrl: null, failedUrl: cutoutUrl })}
-          className="w-full h-full object-contain object-bottom block animate-poster-enter motion-reduce:animate-none"
+      {isPrimaryReady ? (
+        <div
+          key={playerKey}
+          className="relative w-full h-full animate-poster-enter motion-reduce:animate-none"
           style={BOTTOM_FADE_MASK}
-        />
+        >
+          {decodedUrls.map((url, idx) => (
+            <img
+              key={`${idx}-${url}`}
+              src={url}
+              alt={idx === 0 ? playerName : ''}
+              aria-hidden={idx !== 0}
+              draggable={false}
+              className="absolute inset-0 w-full h-full object-contain object-bottom block pointer-events-none"
+              style={{ opacity: idx === displayIdx ? 1 : 0 }}
+            />
+          ))}
+        </div>
       ) : (
         <div className="relative w-full h-full">
           <PlaceholderSilhouette />
@@ -481,8 +668,13 @@ export function StatusChip({ label = 'Waiting for the umpire to start' }) {
 
 /**
  * Broadcast-style TV Standby Poster (1920x1080 design stage).
+ * Coordinates ordered progressive frame preloading (all Frame 0 Idle cutouts first,
+ * then extra motion frames 1..3 in spotlight order) and runs a 1-by-1 turn-taking
+ * stop-motion spotlight (`A-front -> A-back -> B-front -> B-back`), skipping
+ * empty or 1-photo slots and honoring `prefers-reduced-motion`.
+ *
  * Props: `{ courtNumber, matchType, teamA: Player[], teamB: Player[] }`
- * where `Player = { name, cutoutUrl }`.
+ * where `Player = { id?, name, cutoutUrl?, cutoutUrls?: string[] }`.
  */
 export default function StandbyPoster({
   courtNumber = 1,
@@ -509,9 +701,253 @@ export default function StandbyPoster({
   );
 
   const frontA = activeTeamA[0] || null;
-  const backA = activeTeamA[1] || null;
+  const backA = isSingles ? null : activeTeamA[1] || null;
   const frontB = activeTeamB[0] || null;
-  const backB = activeTeamB[1] || null;
+  const backB = isSingles ? null : activeTeamB[1] || null;
+
+  const activeOrder = useMemo(
+    () => (isSingles ? ['A-front', 'B-front'] : STANDBY_SLOT_ORDER),
+    [isSingles]
+  );
+
+  const slotPlayers = useMemo(
+    () => ({
+      'A-front': frontA,
+      'A-back': backA,
+      'B-front': frontB,
+      'B-back': backB,
+    }),
+    [frontA, backA, frontB, backB]
+  );
+
+  const slotSignatures = useMemo(() => {
+    const sig = {};
+    for (const key of STANDBY_SLOT_ORDER) {
+      const p = slotPlayers[key];
+      const urls = Array.isArray(p?.cutoutUrls)
+        ? p.cutoutUrls
+        : p?.cutoutUrl
+        ? [p.cutoutUrl]
+        : [];
+      const cleanUrls = urls
+        .filter((u) => typeof u === 'string' && u.trim())
+        .map((u) => u.trim())
+        .join(',');
+      sig[key] = `${p?.name || ''}|${cleanUrls}`;
+    }
+    return sig;
+  }, [slotPlayers]);
+
+  const slotHasPrimaryUrl = useMemo(() => {
+    const has = {};
+    for (const key of STANDBY_SLOT_ORDER) {
+      const p = slotPlayers[key];
+      const urls = Array.isArray(p?.cutoutUrls)
+        ? p.cutoutUrls
+        : p?.cutoutUrl
+        ? [p.cutoutUrl]
+        : [];
+      has[key] = Boolean(
+        p && urls.some((u) => typeof u === 'string' && u.trim())
+      );
+    }
+    return has;
+  }, [slotPlayers]);
+
+  const rosterKey = useMemo(
+    () => activeOrder.map((k) => `${k}:${slotSignatures[k]}`).join('||'),
+    [activeOrder, slotSignatures]
+  );
+
+  const [slotStatus, setSlotStatus] = useState({});
+  const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
+  const [spotlight, setSpotlight] = useState({ activeSlot: null, frameIndex: 0 });
+  const lastSpotlightSlotRef = useRef(null);
+
+  // Sync reduced-motion media preference
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
+      return undefined;
+    }
+    const mq = window.matchMedia('(prefers-reduced-motion: reduce)');
+    setPrefersReducedMotion(mq.matches);
+    const onChange = (e) => setPrefersReducedMotion(e.matches);
+    mq.addEventListener?.('change', onChange);
+    return () => mq.removeEventListener?.('change', onChange);
+  }, []);
+
+  const handleSlotReadyChange = useCallback(
+    (slotKey, { signature, idleSettled, decodedCount }) => {
+      setSlotStatus((prev) => {
+        const cur = prev[slotKey];
+        if (
+          cur &&
+          cur.signature === signature &&
+          cur.idleSettled === idleSettled &&
+          cur.decodedCount === decodedCount
+        ) {
+          return prev;
+        }
+        return {
+          ...prev,
+          [slotKey]: {
+            signature,
+            idleSettled,
+            decodedCount,
+            motionPreloaded:
+              cur && cur.signature === signature ? Boolean(cur.motionPreloaded) : false,
+          },
+        };
+      });
+    },
+    []
+  );
+
+  const handleMotionPreloadDone = useCallback((slotKey, signature) => {
+    setSlotStatus((prev) => {
+      const cur = prev[slotKey];
+      if (cur && cur.signature === signature && cur.motionPreloaded) {
+        return prev;
+      }
+      return {
+        ...prev,
+        [slotKey]: {
+          signature,
+          idleSettled: true,
+          decodedCount:
+            cur && cur.signature === signature ? cur.decodedCount || 0 : 0,
+          motionPreloaded: true,
+        },
+      };
+    });
+  }, []);
+
+  // Derive signature-verified status for every slot without parent/child effect races.
+  // Slots without a primary cutout URL settle immediately so they never stall extra-frame preloads.
+  const effectiveSlotStatus = useMemo(() => {
+    const out = {};
+    for (const key of STANDBY_SLOT_ORDER) {
+      if (!slotHasPrimaryUrl[key]) {
+        out[key] = {
+          idleSettled: true,
+          decodedCount: 0,
+          motionPreloaded: true,
+        };
+      } else {
+        const cur = slotStatus[key];
+        out[key] =
+          cur && cur.signature === slotSignatures[key]
+            ? cur
+            : {
+                idleSettled: false,
+                decodedCount: 0,
+                motionPreloaded: false,
+              };
+      }
+    }
+    return out;
+  }, [slotHasPrimaryUrl, slotStatus, slotSignatures]);
+
+  const effectiveSlotStatusRef = useRef({});
+  effectiveSlotStatusRef.current = effectiveSlotStatus;
+
+  // Gate extra motion frame downloads: wait until ALL Frame 0 idle cutouts settle,
+  // then unlock extra frames strictly in turn order (A-front -> A-back -> B-front -> B-back).
+  const preloadGrantIdx = useMemo(() => {
+    const allIdleDone = activeOrder.every(
+      (k) => effectiveSlotStatus[k]?.idleSettled
+    );
+    if (!allIdleDone) return -1;
+    const firstPending = activeOrder.findIndex(
+      (k) => !effectiveSlotStatus[k]?.motionPreloaded
+    );
+    return firstPending === -1 ? activeOrder.length - 1 : firstPending;
+  }, [activeOrder, effectiveSlotStatus]);
+
+  const eligibleSlots = useMemo(
+    () =>
+      activeOrder.filter(
+        (k) => (effectiveSlotStatus[k]?.decodedCount || 0) >= 2
+      ),
+    [activeOrder, effectiveSlotStatus]
+  );
+
+  const eligibleSlotsRef = useRef([]);
+  eligibleSlotsRef.current = eligibleSlots;
+  const hasEligibleMotion = eligibleSlots.length > 0;
+
+  // 1-by-1 sequential turn-taking stop-motion coordinator
+  useEffect(() => {
+    if (prefersReducedMotion || !hasEligibleMotion) {
+      setSpotlight({ activeSlot: null, frameIndex: 0 });
+      return undefined;
+    }
+
+    let cancelled = false;
+    let timerId = null;
+
+    const stepBurst = (slotKey, frameIdx, totalFrames) => {
+      if (cancelled) return;
+      setSpotlight({ activeSlot: slotKey, frameIndex: frameIdx });
+
+      timerId = window.setTimeout(() => {
+        if (cancelled) return;
+        if (frameIdx + 1 < totalFrames) {
+          stepBurst(slotKey, frameIdx + 1, totalFrames);
+        } else {
+          // Return to Idle Frame 0 and hold before starting next eligible player
+          runPauseThenNext(MOTION_INTER_PLAYER_PAUSE_MS);
+        }
+      }, MOTION_FRAME_INTERVAL_MS);
+    };
+
+    const runPauseThenNext = (delayMs) => {
+      if (cancelled) return;
+      setSpotlight({ activeSlot: null, frameIndex: 0 });
+
+      timerId = window.setTimeout(() => {
+        if (cancelled) return;
+        const currentEligible = eligibleSlotsRef.current;
+        const nextSlot = getNextSpotlightSlot(
+          lastSpotlightSlotRef.current,
+          currentEligible
+        );
+        if (!nextSlot) return;
+
+        lastSpotlightSlotRef.current = nextSlot;
+        const totalFrames =
+          effectiveSlotStatusRef.current[nextSlot]?.decodedCount || 0;
+        if (totalFrames < 2) {
+          runPauseThenNext(MOTION_INTER_PLAYER_PAUSE_MS);
+          return;
+        }
+        stepBurst(nextSlot, 1, totalFrames);
+      }, delayMs);
+    };
+
+    // Initial breath so the 400ms entrance animation settles cleanly before Player 1 moves
+    runPauseThenNext(650);
+
+    return () => {
+      cancelled = true;
+      if (timerId !== null) window.clearTimeout(timerId);
+    };
+  }, [prefersReducedMotion, hasEligibleMotion, rosterKey]);
+
+  const getSlotProps = (slotKey) => {
+    const orderIdx = activeOrder.indexOf(slotKey);
+    const allowMotionPreload = orderIdx !== -1 && orderIdx <= preloadGrantIdx;
+    const activeFrameIndex =
+      spotlight.activeSlot === slotKey ? spotlight.frameIndex : 0;
+
+    return {
+      slotSignature: slotSignatures[slotKey],
+      activeFrameIndex,
+      allowMotionPreload,
+      onSlotReadyChange: handleSlotReadyChange,
+      onMotionPreloadDone: handleMotionPreloadDone,
+    };
+  };
 
   return (
     <PosterStage className={className}>
@@ -536,10 +972,34 @@ export default function StandbyPoster({
       </h1>
 
       {/* 5. Player Avatar Slots (stack order: back players first, then front players) */}
-      {!isSingles && <PlayerSlot team="A" position="back" player={backA} />}
-      {!isSingles && <PlayerSlot team="B" position="back" player={backB} />}
-      <PlayerSlot team="A" position="front" player={frontA} />
-      <PlayerSlot team="B" position="front" player={frontB} />
+      {!isSingles && (
+        <PlayerSlot
+          team="A"
+          position="back"
+          player={backA}
+          {...getSlotProps('A-back')}
+        />
+      )}
+      {!isSingles && (
+        <PlayerSlot
+          team="B"
+          position="back"
+          player={backB}
+          {...getSlotProps('B-back')}
+        />
+      )}
+      <PlayerSlot
+        team="A"
+        position="front"
+        player={frontA}
+        {...getSlotProps('A-front')}
+      />
+      <PlayerSlot
+        team="B"
+        position="front"
+        player={frontB}
+        {...getSlotProps('B-front')}
+      />
 
       {/* 6. Player Name Pills */}
       <NamePill team="A" position="front" player={frontA} />

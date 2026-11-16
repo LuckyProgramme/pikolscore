@@ -20,6 +20,8 @@ import {
   Timer,
   Plus,
   Play,
+  Pause,
+  Loader2,
   RotateCcw,
   Sparkles,
   LayoutGrid,
@@ -29,6 +31,10 @@ import { supabase } from '@/config/supabase';
 import AuthLoadingSplash from '@/components/auth/AuthLoadingSplash';
 import FlipDigit from '@/components/scoreboard/FlipDigit';
 import { formatMmSs } from '@/hooks/useMatchTimer';
+import {
+  processPlayerCutoutFile,
+  extractStoragePathFromPublicUrl,
+} from '@/lib/photo-cutout';
 
 const outfit = Outfit({
   subsets: ['latin'],
@@ -63,8 +69,32 @@ const EXPERIENCE_LEVELS = [
   },
 ];
 
+const POSE_SLOTS = [
+  { index: 0, shortLabel: 'Pose 1 · Idle' },
+  { index: 1, shortLabel: 'Pose 2 · Motion' },
+  { index: 2, shortLabel: 'Pose 3 · Motion' },
+  { index: 3, shortLabel: 'Pose 4 · Motion' },
+];
+
+const EMPTY_PHOTO_SLOT = {
+  url: null,
+  file: null,
+  size: 0,
+  isNew: false,
+  status: 'idle',
+  statusText: '',
+  progress: 0,
+};
+
+function createEmptyPhotoSlots() {
+  return POSE_SLOTS.map(() => ({ ...EMPTY_PHOTO_SLOT }));
+}
+
 function formatBytes(bytes) {
-  if (!bytes || bytes <= 0) return '0 MB';
+  if (!bytes || bytes <= 0) return '0 KB';
+  if (bytes < 1024 * 1024) {
+    return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+  }
   const mb = bytes / (1024 * 1024);
   return `${mb.toFixed(1)} MB`;
 }
@@ -103,16 +133,29 @@ export default function PlayerPortal() {
   // Player Profile form state (authenticated)
   const [fullName, setFullName] = useState('');
   const [experience, setExperience] = useState('');
-  const [photos, setPhotos] = useState([
-    { url: null, file: null, size: 0, isNew: false },
-    { url: null, file: null, size: 0, isNew: false },
-    { url: null, file: null, size: 0, isNew: false },
-  ]);
+  const [photos, setPhotos] = useState(() => createEmptyPhotoSlots());
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState('');
   const [saveSuccess, setSaveSuccess] = useState('');
+  const [isPreviewPlaying, setIsPreviewPlaying] = useState(true);
+  const [previewFrameIdx, setPreviewFrameIdx] = useState(0);
 
-  const fileInputRefs = [useRef(null), useRef(null), useRef(null)];
+  const fileInputRefs = [useRef(null), useRef(null), useRef(null), useRef(null)];
+  const slotJobSeqRef = useRef([0, 0, 0, 0]);
+  const cutoutQueueRef = useRef(Promise.resolve());
+  const photosRef = useRef(photos);
+  photosRef.current = photos;
+
+  // Revoke any temporary object URLs when PlayerPortal unmounts
+  useEffect(() => {
+    return () => {
+      photosRef.current.forEach((slot) => {
+        if (slot?.url?.startsWith('blob:')) {
+          URL.revokeObjectURL(slot.url);
+        }
+      });
+    };
+  }, []);
 
   // 1. Initial Session & Profile Loader
   useEffect(() => {
@@ -279,15 +322,22 @@ export default function PlayerPortal() {
 
       const rawUrls = Array.isArray(currentProfile?.photo_urls)
         ? currentProfile.photo_urls
-        : [null, null, null];
+        : [];
 
-      const initialSlots = [
-        { url: rawUrls[0] || currentProfile?.avatar_url || null, file: null, size: 0, isNew: false },
-        { url: rawUrls[1] || null, file: null, size: 0, isNew: false },
-        { url: rawUrls[2] || null, file: null, size: 0, isNew: false },
-      ];
+      const initialSlots = POSE_SLOTS.map(({ index }) => {
+        const fallbackUrl = index === 0 ? currentProfile?.avatar_url || null : null;
+        return {
+          ...EMPTY_PHOTO_SLOT,
+          url: rawUrls[index] || fallbackUrl,
+        };
+      });
 
-      setPhotos(initialSlots);
+      setPhotos((prev) => {
+        prev.forEach((slot) => {
+          if (slot?.url?.startsWith('blob:')) URL.revokeObjectURL(slot.url);
+        });
+        return initialSlots;
+      });
       setLoadingInitial(false);
     } catch (err) {
       console.error('Error loading profile:', err);
@@ -495,9 +545,63 @@ export default function PlayerPortal() {
   // 6. Photo & Profile Handlers
   const totalBytes = photos.reduce((acc, p) => acc + (p?.size || 0), 0);
   const isOverLimit = totalBytes > MAX_TOTAL_BYTES;
+  const isProcessingPhotos = photos.some((p) => p?.status === 'processing');
+
+  const previewFrameUrls = useMemo(
+    () =>
+      photos
+        .map((p) => (p?.status !== 'processing' && p?.url ? p.url : null))
+        .filter(Boolean),
+    [photos]
+  );
+
+  // Miniature 4-frame stop-motion preview playback inside My Profile
+  useEffect(() => {
+    if (activeTab !== 'profile' || !isPreviewPlaying || previewFrameUrls.length < 2) {
+      setPreviewFrameIdx(0);
+      return;
+    }
+
+    const prefersReducedMotion =
+      typeof window !== 'undefined' &&
+      typeof window.matchMedia === 'function' &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (prefersReducedMotion) {
+      setPreviewFrameIdx(0);
+      return;
+    }
+
+    let cancelled = false;
+    let timerId = null;
+    let stepIdx = 0;
+
+    const tick = () => {
+      if (cancelled) return;
+      if (stepIdx < previewFrameUrls.length - 1) {
+        stepIdx += 1;
+        setPreviewFrameIdx(stepIdx);
+        timerId = window.setTimeout(tick, 180);
+      } else {
+        stepIdx = 0;
+        setPreviewFrameIdx(0);
+        timerId = window.setTimeout(tick, 1500);
+      }
+    };
+
+    setPreviewFrameIdx(0);
+    timerId = window.setTimeout(tick, 900);
+
+    return () => {
+      cancelled = true;
+      if (timerId !== null) window.clearTimeout(timerId);
+    };
+  }, [activeTab, isPreviewPlaying, previewFrameUrls]);
 
   const handlePhotoSelect = (slotIndex, e) => {
     const file = e.target.files?.[0];
+    if (fileInputRefs[slotIndex]?.current) {
+      fileInputRefs[slotIndex].current.value = '';
+    }
     if (!file) return;
 
     const validTypes = ['image/jpeg', 'image/png', 'image/webp'];
@@ -507,24 +611,92 @@ export default function PlayerPortal() {
     }
 
     setSaveError('');
-    const previewUrl = URL.createObjectURL(file);
+    setSaveSuccess('');
+    slotJobSeqRef.current[slotIndex] += 1;
+    const jobId = slotJobSeqRef.current[slotIndex];
 
     setPhotos((prev) => {
       const next = [...prev];
-      next[slotIndex] = { url: previewUrl, file, size: file.size, isNew: true };
+      if (next[slotIndex]?.url?.startsWith('blob:')) {
+        URL.revokeObjectURL(next[slotIndex].url);
+      }
+      next[slotIndex] = {
+        ...EMPTY_PHOTO_SLOT,
+        status: 'processing',
+        statusText: 'Queued…',
+        progress: 0.05,
+      };
       return next;
     });
 
-    if (fileInputRefs[slotIndex]?.current) {
-      fileInputRefs[slotIndex].current.value = '';
-    }
+    // Serialize WASM segmentation jobs so selecting 4 photos at once never spikes mobile RAM
+    cutoutQueueRef.current = cutoutQueueRef.current
+      .catch(() => {})
+      .then(async () => {
+        if (slotJobSeqRef.current[slotIndex] !== jobId) return;
+
+        try {
+          const normalizedFile = await processPlayerCutoutFile(file, {
+            onProgress: ({ label, progress }) => {
+              if (slotJobSeqRef.current[slotIndex] !== jobId) return;
+              setPhotos((prev) => {
+                const next = [...prev];
+                next[slotIndex] = {
+                  ...next[slotIndex],
+                  status: 'processing',
+                  statusText: label || 'Removing background…',
+                  progress: typeof progress === 'number' ? progress : 0.4,
+                };
+                return next;
+              });
+            },
+          });
+
+          if (slotJobSeqRef.current[slotIndex] !== jobId) return;
+          const previewUrl = URL.createObjectURL(normalizedFile);
+
+          setPhotos((prev) => {
+            const next = [...prev];
+            if (next[slotIndex]?.url?.startsWith('blob:')) {
+              URL.revokeObjectURL(next[slotIndex].url);
+            }
+            next[slotIndex] = {
+              url: previewUrl,
+              file: normalizedFile,
+              size: normalizedFile.size,
+              isNew: true,
+              status: 'idle',
+              statusText: '',
+              progress: 1,
+            };
+            return next;
+          });
+        } catch (err) {
+          if (slotJobSeqRef.current[slotIndex] !== jobId) return;
+          const msg = err?.message || 'Background removal failed.';
+          setPhotos((prev) => {
+            const next = [...prev];
+            next[slotIndex] = {
+              ...EMPTY_PHOTO_SLOT,
+              status: 'error',
+              statusText: msg,
+            };
+            return next;
+          });
+          setSaveError(`Pose ${slotIndex + 1}: ${msg}`);
+        }
+      });
   };
 
   const handlePhotoRemove = (slotIndex) => {
     setSaveError('');
+    slotJobSeqRef.current[slotIndex] += 1;
     setPhotos((prev) => {
       const next = [...prev];
-      next[slotIndex] = { url: null, file: null, size: 0, isNew: false };
+      if (next[slotIndex]?.url?.startsWith('blob:')) {
+        URL.revokeObjectURL(next[slotIndex].url);
+      }
+      next[slotIndex] = { ...EMPTY_PHOTO_SLOT };
       return next;
     });
   };
@@ -545,6 +717,11 @@ export default function PlayerPortal() {
       return;
     }
 
+    if (isProcessingPhotos) {
+      setSaveError('Please wait for background removal to finish on all photos.');
+      return;
+    }
+
     if (isOverLimit) {
       setSaveError('Total photo size exceeds 15 MB.');
       return;
@@ -553,19 +730,30 @@ export default function PlayerPortal() {
     setIsSaving(true);
     try {
       const userId = session.user.id;
-      const finalUrls = [null, null, null];
+      const previousUrls = new Set(
+        [
+          ...(Array.isArray(profile?.photo_urls) ? profile.photo_urls : []),
+          profile?.avatar_url,
+        ].filter(Boolean)
+      );
 
-      for (let i = 0; i < 3; i++) {
+      const finalUrls = POSE_SLOTS.map(() => null);
+
+      for (let i = 0; i < POSE_SLOTS.length; i++) {
         const slot = photos[i];
         if (slot?.isNew && slot?.file) {
-          const ext = slot.file.name.split('.').pop() || 'jpg';
+          const ext = slot.file.name.split('.').pop() || 'webp';
           const filePath = `${userId}/slot-${i + 1}-${Date.now()}.${ext}`;
 
           const { error: uploadError } = await supabase.storage
             .from('player-photos')
-            .upload(filePath, slot.file, { cacheControl: '3600', upsert: true });
+            .upload(filePath, slot.file, {
+              cacheControl: '31536000',
+              contentType: slot.file.type || 'image/webp',
+              upsert: true,
+            });
 
-          if (uploadError) throw new Error(`Upload error on photo ${i + 1}: ${uploadError.message}`);
+          if (uploadError) throw new Error(`Upload error on pose ${i + 1}: ${uploadError.message}`);
 
           const {
             data: { publicUrl },
@@ -577,7 +765,8 @@ export default function PlayerPortal() {
         }
       }
 
-      const primaryAvatar = finalUrls[0] || finalUrls[1] || finalUrls[2] || null;
+      const primaryAvatar =
+        finalUrls[0] || finalUrls[1] || finalUrls[2] || finalUrls[3] || null;
 
       const { data: updated, error: updateError } = await supabase
         .from('profiles')
@@ -594,7 +783,68 @@ export default function PlayerPortal() {
 
       if (updateError) throw updateError;
 
+      // Clean up replaced or deleted old player-photos files belonging to this user
+      const keptPaths = new Set(
+        finalUrls
+          .map((u) => extractStoragePathFromPublicUrl(u))
+          .filter(Boolean)
+      );
+      const obsoletePaths = Array.from(previousUrls)
+        .map((u) => extractStoragePathFromPublicUrl(u))
+        .filter((p) => p && p.startsWith(`${userId}/`) && !keptPaths.has(p));
+
+      if (obsoletePaths.length > 0) {
+        supabase.storage
+          .from('player-photos')
+          .remove(obsoletePaths)
+          .catch((rmErr) =>
+            console.warn('Old player photo cleanup warning:', rmErr)
+          );
+      }
+
+      setPhotos((prev) =>
+        POSE_SLOTS.map(({ index }) => {
+          const prevSlot = prev[index];
+          if (prevSlot?.url?.startsWith('blob:')) {
+            URL.revokeObjectURL(prevSlot.url);
+          }
+          return {
+            ...EMPTY_PHOTO_SLOT,
+            url: finalUrls[index] || null,
+          };
+        })
+      );
+
       setProfile(updated);
+
+      // Notify any TV currently showing a pre-match court where this player is seated
+      try {
+        for (let c = 1; c <= 4; c++) {
+          const cs = courtsData[c];
+          const pSlots = cs?.player_names?.slots;
+          if (!cs || cs?.player_names?.lobbyLocked || !pSlots) continue;
+          const isSeated =
+            pSlots.team0?.some((sl) => sl?.userId === userId) ||
+            pSlots.team1?.some((sl) => sl?.userId === userId);
+          if (isSeated) {
+            const ch = supabase.channel(`tv_court:${c}`);
+            ch.subscribe((status) => {
+              if (status === 'SUBSCRIBED') {
+                ch.send({
+                  type: 'broadcast',
+                  event: 'profile_updated',
+                  payload: { userId },
+                }).finally(() => {
+                  supabase.removeChannel(ch);
+                });
+              }
+            });
+          }
+        }
+      } catch {
+        // Non-blocking broadcast notification
+      }
+
       setSaveSuccess('Player profile updated successfully!');
       setActiveTab('courts');
     } catch (err) {
@@ -1222,61 +1472,164 @@ export default function PlayerPortal() {
               </div>
 
               <div>
-                <div className="flex items-center justify-between mb-2">
-                  <label className="text-xs font-bold text-[#084B46]">Court Photos (up to 3)</label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-xs font-bold text-[#084B46]">
+                    TV Standby Poses (up to 4)
+                  </label>
                   <span className="text-[11px] text-[#748079]">
                     {formatBytes(totalBytes)} / 15 MB
                   </span>
                 </div>
+                <p className="text-[11px] text-[#748079] m-0 mb-3 leading-relaxed">
+                  Backgrounds are automatically removed on upload. Pose 1 is your idle stance on TV; adding Poses 2–4 plays a stop-motion burst while waiting for the match.
+                </p>
 
-                <div className="grid grid-cols-3 gap-3">
-                  {[0, 1, 2].map((idx) => {
-                    const slot = photos[idx];
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  {POSE_SLOTS.map(({ index, shortLabel }) => {
+                    const slot = photos[index] || EMPTY_PHOTO_SLOT;
+                    const isBusy = slot.status === 'processing';
+                    const hasError = slot.status === 'error';
+                    const pct = Math.round((slot.progress || 0) * 100);
+
                     return (
-                      <div
-                        key={idx}
-                        className="relative aspect-square rounded-2xl border border-dashed border-[#E2E5DC] bg-[#FAF9F5] overflow-hidden flex items-center justify-center"
-                      >
-                        <input
-                          ref={fileInputRefs[idx]}
-                          type="file"
-                          accept="image/jpeg,image/png,image/webp"
-                          onChange={(e) => handlePhotoSelect(idx, e)}
-                          className="hidden"
-                        />
-                        {slot?.url ? (
-                          <>
-                            <img src={slot.url} alt={`Slot ${idx + 1}`} className="h-full w-full object-cover" />
+                      <div key={index} className="flex flex-col gap-1.5">
+                        <div
+                          className={`relative aspect-[8/15] rounded-2xl border overflow-hidden flex items-center justify-center ${
+                            slot.url
+                              ? 'border-[#0F5C62] bg-gradient-to-b from-[#0F5C62]/80 via-[#073A38] to-[#0C211E]'
+                              : hasError
+                              ? 'border-red-300 bg-red-50/70'
+                              : 'border-dashed border-[#E2E5DC] bg-[#FAF9F5]'
+                          }`}
+                        >
+                          <input
+                            ref={fileInputRefs[index]}
+                            type="file"
+                            accept="image/jpeg,image/png,image/webp"
+                            onChange={(e) => handlePhotoSelect(index, e)}
+                            className="hidden"
+                          />
+
+                          {isBusy ? (
+                            <div className="flex flex-col items-center justify-center p-2 text-center text-[#084B46] gap-2">
+                              <Loader2 size={20} className="animate-spin text-[#0F5C62]" />
+                              <span className="text-[10px] font-bold leading-tight">
+                                {slot.statusText || 'Removing background…'}
+                              </span>
+                              <div className="w-16 h-1.5 rounded-full bg-[#E2E5DC] overflow-hidden">
+                                <div
+                                  className="h-full bg-[#0F5C62] transition-all duration-200"
+                                  style={{ width: `${Math.max(10, Math.min(100, pct))}%` }}
+                                />
+                              </div>
+                            </div>
+                          ) : slot?.url ? (
+                            <>
+                              <img
+                                src={slot.url}
+                                alt={shortLabel}
+                                className="h-full w-full object-contain object-bottom"
+                              />
+                              {slot.size > 0 && (
+                                <span className="absolute bottom-1.5 left-1.5 rounded-full bg-[#0C211E]/85 px-2 py-0.5 text-[9px] font-bold text-[#FEECD6] border border-[#FEECD6]/25">
+                                  {formatBytes(slot.size)}
+                                </span>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => handlePhotoRemove(index)}
+                                aria-label={`Remove ${shortLabel}`}
+                                className="absolute top-1.5 right-1.5 p-1 rounded-full bg-black/65 text-white hover:bg-black cursor-pointer border-0"
+                              >
+                                <X size={13} />
+                              </button>
+                            </>
+                          ) : (
                             <button
                               type="button"
-                              onClick={() => handlePhotoRemove(idx)}
-                              className="absolute top-1.5 right-1.5 p-1 rounded-full bg-black/60 text-white cursor-pointer border-0"
+                              onClick={() => fileInputRefs[index]?.current?.click()}
+                              className="w-full h-full flex flex-col items-center justify-center p-2 text-center text-[#748079] hover:text-[#084B46] bg-transparent border-0 cursor-pointer"
                             >
-                              <X size={13} />
+                              <Camera size={18} />
+                              <span className="text-[10px] mt-1.5 font-semibold leading-tight">
+                                {index === 0 ? 'Add Idle Pose' : `Add Frame ${index}`}
+                              </span>
+                              {hasError && (
+                                <span className="text-[9px] mt-1 text-[#BA1A1A] font-semibold">
+                                  Tap to retry
+                                </span>
+                              )}
                             </button>
-                          </>
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={() => fileInputRefs[idx]?.current?.click()}
-                            className="flex flex-col items-center justify-center p-2 text-center text-[#748079] bg-transparent border-0 cursor-pointer"
-                          >
-                            <Camera size={18} />
-                            <span className="text-[10px] mt-1 font-semibold">Photo {idx + 1}</span>
-                          </button>
-                        )}
+                          )}
+                        </div>
+                        <span className="text-[10px] font-bold text-center text-[#084B46]">
+                          {shortLabel}
+                        </span>
                       </div>
                     );
                   })}
                 </div>
+
+                {/* Live TV Stage Motion Preview */}
+                {previewFrameUrls.length > 0 && (
+                  <div className="mt-4 rounded-2xl bg-[#0C211E] border border-[#0F5C62]/40 p-4 flex items-center justify-between gap-4 text-[#FAF9F5]">
+                    <div className="flex items-center gap-3.5">
+                      <div
+                        className="relative w-16 h-[120px] shrink-0 rounded-xl overflow-hidden bg-gradient-to-b from-[#0F5C62] to-[#073A38] border border-[#FEECD6]/20"
+                        style={{
+                          WebkitMaskImage:
+                            'linear-gradient(to bottom, #000 0%, #000 84%, transparent 100%)',
+                          maskImage:
+                            'linear-gradient(to bottom, #000 0%, #000 84%, transparent 100%)',
+                        }}
+                      >
+                        {previewFrameUrls.map((url, idx) => (
+                          <img
+                            key={`${idx}-${url}`}
+                            src={url}
+                            alt={`Motion frame ${idx + 1}`}
+                            className="absolute inset-0 w-full h-full object-contain object-bottom"
+                            style={{ opacity: idx === previewFrameIdx ? 1 : 0 }}
+                          />
+                        ))}
+                      </div>
+                      <div>
+                        <div className="text-xs font-bold text-[#FEECD6]">
+                          TV Standby Preview ({previewFrameUrls.length}{' '}
+                          {previewFrameUrls.length === 1 ? 'pose' : 'poses'})
+                        </div>
+                        <p className="text-[11px] text-[#EAF0E5]/80 m-0 mt-1 max-w-xs leading-relaxed">
+                          {previewFrameUrls.length >= 2
+                            ? 'Playing 180ms/frame burst with 1.5s idle hold — just like the courtside TV spotlight.'
+                            : 'Shows as a static idle cutout. Add at least 1 more pose to unlock TV motion.'}
+                        </p>
+                      </div>
+                    </div>
+
+                    {previewFrameUrls.length >= 2 && (
+                      <button
+                        type="button"
+                        onClick={() => setIsPreviewPlaying((v) => !v)}
+                        className="shrink-0 inline-flex items-center gap-1.5 rounded-full bg-[#FEECD6] text-[#084B46] px-3.5 py-2 text-xs font-bold border-0 cursor-pointer hover:bg-white transition-colors"
+                      >
+                        {isPreviewPlaying ? <Pause size={13} /> : <Play size={13} />}
+                        <span>{isPreviewPlaying ? 'Pause' : 'Play'}</span>
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
 
               <button
                 type="submit"
-                disabled={isSaving}
-                className="mt-2 h-11 w-full rounded-full bg-[#0F5C62] text-sm font-bold text-[#FEECD6] hover:bg-[#085953] transition-colors cursor-pointer border-0 disabled:opacity-50"
+                disabled={isSaving || isProcessingPhotos}
+                className="mt-2 h-11 w-full rounded-full bg-[#0F5C62] text-sm font-bold text-[#FEECD6] hover:bg-[#085953] transition-colors cursor-pointer border-0 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {isSaving ? 'Saving...' : 'Save Profile Changes'}
+                {isProcessingPhotos
+                  ? 'Processing cutout photos…'
+                  : isSaving
+                  ? 'Saving…'
+                  : 'Save Profile Changes'}
               </button>
             </form>
           </main>

@@ -76,6 +76,7 @@ export default function ScreenView() {
   const [muted, setMuted] = useState(false);
   const [pairingQrSvg, setPairingQrSvg] = useState('');
   const [profilesById, setProfilesById] = useState({});
+  const [profileRefreshNonce, setProfileRefreshNonce] = useState(0);
   const [showPoster, setShowPoster] = useState(false);
   const [isPosterFading, setIsPosterFading] = useState(false);
   const [posterControlsVisible, setPosterControlsVisible] = useState(false);
@@ -404,6 +405,9 @@ export default function ScreenView() {
           triggerCompletedReturnToRole();
         }
       })
+      .on('broadcast', { event: 'profile_updated' }, () => {
+        setProfileRefreshNonce((n) => n + 1);
+      })
       .subscribe();
 
     return () => {
@@ -538,6 +542,7 @@ export default function ScreenView() {
     activeSlotUserIds,
     activeSession?.version,
     activeSession?.updated_at,
+    profileRefreshNonce,
   ]);
 
   const posterProps = useMemo(
