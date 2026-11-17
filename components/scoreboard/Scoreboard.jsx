@@ -32,6 +32,7 @@ export function Scoreboard() {
   const [userEmail, setUserEmail] = useState(null);
   const [logOpen, setLogOpen] = useState(false);
   const [gameWonModalOpen, setGameWonModalOpen] = useState(false);
+  const [isConfirming, setIsConfirming] = useState(false);
   const [isTimeExpired, setIsTimeExpired] = useState(false);
   const [projectModalOpen, setProjectModalOpen] = useState(false);
   const [showAbandonModal, setShowAbandonModal] = useState(false);
@@ -243,18 +244,19 @@ export function Scoreboard() {
   }, []);
 
   const handleCloseGameWon = useCallback(() => {
+    if (isConfirming) return;
     setGameWonModalOpen(false);
-  }, []);
+  }, [isConfirming]);
 
   const handleEscape = useCallback(() => {
     if (showAbandonModal) {
       setShowAbandonModal(false);
-    } else if (gameWonModalOpen) {
+    } else if (gameWonModalOpen && !isConfirming) {
       setGameWonModalOpen(false);
     } else if (logOpen) {
       setLogOpen(false);
     }
-  }, [showAbandonModal, gameWonModalOpen, logOpen]);
+  }, [showAbandonModal, gameWonModalOpen, isConfirming, logOpen]);
 
   const {
     state,
@@ -265,7 +267,6 @@ export function Scoreboard() {
     fault,
     undo,
     redo,
-    reset,
     timeExpired,
   } = useScoreboard({
     elapsedSeconds: timer.elapsedSeconds,
@@ -301,14 +302,17 @@ export function Scoreboard() {
     }
   }, [timer.status, timer.remainingSeconds, state?.gameOver]);
 
-  // Automatically pause timer when a team wins (inline R11 row appears first; GameWonModal opens on 'View summary')
+  // Automatically pause timer and open GameWonModal when a team wins or time expires
   useEffect(() => {
     if (state?.gameOver) {
       timer.pause();
+      if (!isGuest) {
+        setGameWonModalOpen(true);
+      }
     } else {
       setGameWonModalOpen(false);
     }
-  }, [state?.gameOver]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [state?.gameOver, isGuest]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // If an authenticated umpire visits /pikolscore without a valid session, redirect to /matches
   useEffect(() => {
@@ -344,63 +348,119 @@ export function Scoreboard() {
     };
   }, [isOwningUmpire, isMatchOver]);
 
-  const handleRematch = useCallback(async () => {
-    if (isGuest || isTransitioningMatchRef.current) return;
+  const handleConfirmMatch = useCallback(async () => {
+    if (isGuest || isConfirming || isTransitioningMatchRef.current) return;
     isTransitioningMatchRef.current = true;
-
-    setIsTimeExpired(false);
-    setGameWonModalOpen(false);
+    setIsConfirming(true);
     clearRallyToast();
 
-    try {
-      if (sync?.isEnabled && sync.sessionId) {
-        const isCompleted = state?.gameOver || timer.status === 'expired';
-        await sync.closeSession(isCompleted ? 'completed' : 'abandoned');
-      }
-
-      reset();
-      timer.reset(false);
-
-      if (sync?.isEnabled && engineRef.current) {
-        const newSessionId = await sync.createSession(engineRef.current, timer.durationMs, true);
-        if (newSessionId) {
-          router.replace(`/pikolscore?session=${newSessionId}`);
-        }
-      }
-      timer.start(true);
-    } finally {
-      isTransitioningMatchRef.current = false;
-    }
-  }, [isGuest, reset, timer, sync, state?.gameOver, router, clearRallyToast]);
-
-  const handleGoToMatches = useCallback(async () => {
-    const closingSessionId = sync?.sessionId;
+    const closingSessionId = sync?.sessionId || null;
     const courtNum =
       Number(
         sync?.serverSession?.court_number ||
-          sync?.serverSession?.player_names?.courtNumber
+          sync?.serverSession?.player_names?.courtNumber ||
+          state?.playerNames?.courtNumber
       ) || null;
     const pairedTvIds = Array.isArray(sync?.serverSession?.player_names?.pairedTvIds)
       ? sync.serverSession.player_names.pairedTvIds
       : [];
 
-    if (
-      sync?.isEnabled &&
-      closingSessionId &&
-      (state?.gameOver || timer.status === 'expired' || timer.remainingSeconds === 0)
-    ) {
-      await Promise.allSettled([
-        notifyTvCourtClosed({
-          courtNumber: courtNum,
-          sessionId: closingSessionId,
-          reason: 'completed',
-          pairedTvIds,
-        }),
-        sync.closeSession('completed'),
-      ]);
+    const clientSnapshot = {
+      sessionId: closingSessionId,
+      courtNumber: courtNum,
+      format: state?.format || 'doubles',
+      scores: state?.scores || [0, 0],
+      winner:
+        state?.winner !== null && state?.winner !== undefined
+          ? state.winner
+          : (state?.scores?.[0] ?? 0) > (state?.scores?.[1] ?? 0)
+          ? 0
+          : (state?.scores?.[1] ?? 0) > (state?.scores?.[0] ?? 0)
+          ? 1
+          : null,
+      isDraw: Boolean(state?.isDraw),
+      isTimeExpired: Boolean(isTimeExpired || timer.status === 'expired'),
+      teamKeys: state?.teamKeys || ['omega', 'alpha'],
+      teamNames: state?.teamNames || ['Team Omega', 'Team Alpha'],
+      playerNames:
+        sync?.serverSession?.player_names ||
+        state?.playerNames ||
+        null,
+      umpireId: userId || sync?.serverSession?.umpire_id || null,
+      umpireName:
+        profile?.full_name ||
+        sync?.serverSession?.player_names?.umpireName ||
+        userEmail ||
+        null,
+      elapsedSeconds: timer.elapsedSeconds || 0,
+      log: log || [],
+      legacyLog: sync?.legacyLog || [],
+    };
+
+    try {
+      const {
+        data: { session: authSession },
+      } = await supabase.auth.getSession();
+      const token = authSession?.access_token || '';
+
+      const confirmTask = token
+        ? fetch('/api/match/results', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({
+              sessionId: closingSessionId,
+              courtNumber: courtNum,
+              clientSnapshot,
+            }),
+          }).catch((err) => {
+            console.warn('[Scoreboard] Failed to post match results:', err);
+          })
+        : Promise.resolve();
+
+      const closeTasks = [confirmTask];
+
+      if (
+        sync?.isEnabled &&
+        closingSessionId &&
+        (state?.gameOver || timer.status === 'expired' || timer.remainingSeconds === 0)
+      ) {
+        closeTasks.push(
+          notifyTvCourtClosed({
+            courtNumber: courtNum,
+            sessionId: closingSessionId,
+            reason: 'completed',
+            pairedTvIds,
+          }),
+          sync.closeSession('completed')
+        );
+      }
+
+      await Promise.allSettled(closeTasks);
+      setGameWonModalOpen(false);
+      router.push('/matches');
+    } finally {
+      setIsConfirming(false);
+      isTransitioningMatchRef.current = false;
     }
-    router.push('/matches');
-  }, [sync, state?.gameOver, timer.status, timer.remainingSeconds, router]);
+  }, [
+    isGuest,
+    isConfirming,
+    clearRallyToast,
+    sync,
+    state,
+    isTimeExpired,
+    timer.status,
+    timer.remainingSeconds,
+    timer.elapsedSeconds,
+    userId,
+    profile,
+    userEmail,
+    log,
+    router,
+  ]);
 
   const handleAbandon = useCallback(async () => {
     if (isGuest || !sync?.sessionId) return;
@@ -498,11 +558,11 @@ export function Scoreboard() {
   const handleToggleTimer = useCallback(() => {
     if (isGuest) return;
     if (timer.status === 'expired' || timer.remainingSeconds === 0) {
-      handleRematch();
+      setGameWonModalOpen(true);
     } else {
       timer.toggle();
     }
-  }, [isGuest, timer, handleRematch]);
+  }, [isGuest, timer]);
 
   const effectiveTimeExpired = Boolean(
     isTimeExpired ||
@@ -676,19 +736,19 @@ export function Scoreboard() {
                 <div className="flex items-center gap-2.5">
                   <button
                     type="button"
-                    disabled={isGuest}
+                    disabled={isGuest || isConfirming}
                     onClick={() => !isGuest && setGameWonModalOpen(true)}
-                    className="inline-flex h-[40px] items-center justify-center rounded-[10px] border border-[#24425E] bg-[#07192B] px-4 text-[13px] font-semibold text-[#FFFFFF] hover:border-[#00E5B8] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#00E5B8] cursor-pointer"
+                    className="inline-flex h-[40px] items-center justify-center rounded-[10px] border border-[#24425E] bg-[#07192B] px-4 text-[13px] font-semibold text-[#FFFFFF] hover:border-[#00E5B8] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#00E5B8] cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
                   >
                     View summary
                   </button>
                   <button
                     type="button"
-                    disabled={isGuest}
-                    onClick={handleGoToMatches}
-                    className="inline-flex h-[40px] items-center justify-center rounded-[10px] bg-[#00E5B8] px-4 text-[13px] font-bold text-[#031B28] hover:bg-[#05DFB4] border-0 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#00E5B8] cursor-pointer"
+                    disabled={isGuest || isConfirming}
+                    onClick={handleConfirmMatch}
+                    className="inline-flex h-[40px] items-center justify-center rounded-[10px] bg-[#00E5B8] px-4 text-[13px] font-bold text-[#031B28] hover:bg-[#05DFB4] border-0 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#00E5B8] cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
                   >
-                    New match
+                    {isConfirming ? 'Confirming...' : 'Confirm'}
                   </button>
                 </div>
               </div>
@@ -795,12 +855,11 @@ export function Scoreboard() {
           teamNames={teamNames}
           courtNumber={resolvedCourtNumber}
           canUndo={canUndo && !isTimeExpired}
+          isConfirming={isConfirming}
           isDraw={Boolean(state?.isDraw)}
           isTimeExpired={isTimeExpired || timer.status === 'expired'}
-          onRematch={handleRematch}
-          onNewMatch={handleRematch}
+          onConfirm={handleConfirmMatch}
           onUndo={handleUndoWinningPoint}
-          onGoToMatches={handleGoToMatches}
           onClose={handleCloseGameWon}
         />
       </div>

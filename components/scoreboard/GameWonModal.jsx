@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
-import { Trophy, RotateCcw, Undo2, ArrowLeft, X } from 'lucide-react';
+import { Trophy, Check, Loader2, Undo2, X } from 'lucide-react';
 import { CONTENT } from '../../config/content';
 
 export function GameWonModal({
@@ -10,12 +10,11 @@ export function GameWonModal({
   scores = [0, 0],
   teamNames = ['Team Omega', 'Team Alpha'],
   courtNumber = null,
-  onRematch,
-  onNewMatch,
+  onConfirm,
   onUndo,
-  onGoToMatches,
   onClose,
   canUndo = true,
+  isConfirming = false,
   isDraw = false,
   isTimeExpired = false,
   title,
@@ -131,7 +130,8 @@ export function GameWonModal({
         <button
           type="button"
           className="ps-modal-close-btn"
-          onClick={onClose}
+          disabled={isConfirming}
+          onClick={() => !isConfirming && onClose?.()}
           aria-label="Dismiss and review scoreboard"
           title="Review scoreboard"
         >
@@ -188,14 +188,24 @@ export function GameWonModal({
           <button
             ref={primaryBtnRef}
             type="button"
-            className="ps-victory-btn-primary"
-            onClick={onRematch || onNewMatch}
+            disabled={isConfirming}
+            className="ps-victory-btn-primary disabled:opacity-60 disabled:cursor-not-allowed"
+            onClick={onConfirm}
           >
-            <RotateCcw size={17} aria-hidden="true" />
-            <span>{CONTENT.gameWonModal.rematchButton || 'Rematch (Same Players)'}</span>
+            {isConfirming ? (
+              <>
+                <Loader2 size={17} className="animate-spin" aria-hidden="true" />
+                <span>{CONTENT.gameWonModal.confirmingButton || 'Confirming...'}</span>
+              </>
+            ) : (
+              <>
+                <Check size={17} aria-hidden="true" />
+                <span>{CONTENT.gameWonModal.confirmButton || 'Confirm'}</span>
+              </>
+            )}
           </button>
 
-          {canUndo && onUndo && (
+          {canUndo && onUndo && !isConfirming && (
             <button
               type="button"
               className="ps-victory-btn-secondary"
@@ -203,17 +213,6 @@ export function GameWonModal({
             >
               <Undo2 size={16} aria-hidden="true" />
               <span>{CONTENT.gameWonModal.undoButton}</span>
-            </button>
-          )}
-
-          {onGoToMatches && (
-            <button
-              type="button"
-              className="ps-victory-btn-secondary"
-              onClick={onGoToMatches}
-            >
-              <ArrowLeft size={16} aria-hidden="true" />
-              <span>{CONTENT.gameWonModal.goToMatchesButton || 'Match Hub / New Match'}</span>
             </button>
           )}
         </div>
