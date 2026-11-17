@@ -4,7 +4,6 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Tv,
   X,
-  Camera,
   ExternalLink,
   Loader2,
   AlertCircle,
@@ -146,7 +145,6 @@ export function ProjectToScreenModal({
           const canvas = canvasRef.current;
 
           if (video && video.readyState >= 2) {
-            // 1. Try native BarcodeDetector first if available
             if (barcodeDetector) {
               try {
                 const codes = await barcodeDetector.detect(video);
@@ -159,7 +157,6 @@ export function ProjectToScreenModal({
               }
             }
 
-            // 2. Universal jsQR canvas decoder
             if (canvas && video.videoWidth > 0 && video.videoHeight > 0) {
               canvas.width = video.videoWidth;
               canvas.height = video.videoHeight;
@@ -216,40 +213,33 @@ export function ProjectToScreenModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-deep-green/75 backdrop-blur-sm overflow-y-auto"
+      className="fixed inset-0 z-50 flex items-center justify-center p-3.5 bg-[#021024]/75 backdrop-blur-[12px] overflow-y-auto"
       role="dialog"
       aria-modal="true"
       aria-labelledby="project-screen-modal-title"
     >
-      <div className="relative w-full max-w-lg bg-ivory rounded-[28px] sm:rounded-[34px] border border-line shadow-2xl p-5 sm:p-7 my-auto text-dark-teal">
+      <div className="relative w-full max-w-[510px] bg-[#0B2239] rounded-[20px] border border-[#24425E] dv-top-accent shadow-2xl p-6 my-auto text-[#FFFFFF]">
         {/* Top Header */}
-        <div className="flex items-start justify-between gap-3 pb-4 mb-5 border-b border-line">
-          <div className="flex items-center gap-3">
-            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-pale-sage text-teal border border-teal/20">
-              <Tv size={22} aria-hidden="true" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="rounded-full bg-teal px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wider text-cream">
-                  Court {courtNumber}
-                </span>
-                <span className="text-[12px] font-semibold text-muted">
-                  Screen Projection
-                </span>
-              </div>
-              <h2
-                id="project-screen-modal-title"
-                className="text-[20px] sm:text-[22px] font-bold text-dark-teal m-0 mt-0.5"
-              >
-                Project Court {courtNumber} to TV Screen
-              </h2>
-            </div>
+        <div className="flex items-start justify-between gap-3 pb-3">
+          <div>
+            <span className="dv-overline block mb-2">
+              COURT {courtNumber} · SCREEN PROJECTION
+            </span>
+            <h2
+              id="project-screen-modal-title"
+              className="dv-display text-[30px] leading-[1.08] text-[#FFFFFF] m-0"
+            >
+              PROJECT COURT {courtNumber} TO TV
+            </h2>
+            <p className="text-[15px] text-[#B0C4D8] m-0 mt-2">
+              Point camera at the QR code on the TV screen (/umpire).
+            </p>
           </div>
 
           <button
             type="button"
             onClick={onClose}
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-off-white border border-line text-muted hover:text-dark-teal hover:bg-pale-sage transition-colors cursor-pointer"
+            className="flex h-[44px] w-[44px] shrink-0 items-center justify-center rounded-[12px] bg-[#07192B] border border-[#24425E] text-[#FFFFFF] hover:border-[#00E5B8] transition-colors cursor-pointer"
             aria-label="Close projection modal"
           >
             <X size={18} aria-hidden="true" />
@@ -260,7 +250,7 @@ export function ProjectToScreenModal({
         {errorMessage && (
           <div
             role="alert"
-            className="mb-4 rounded-xl bg-error/10 border border-error/20 p-3 text-[13px] font-semibold text-error flex items-center gap-2"
+            className="mb-4 rounded-[10px] bg-[#07192B] border border-[#F47067] p-3 text-[13px] font-semibold text-[#F47067] flex items-center gap-2"
           >
             <AlertCircle size={16} className="shrink-0" />
             <span>{errorMessage}</span>
@@ -270,74 +260,66 @@ export function ProjectToScreenModal({
         {successMessage && (
           <div
             role="status"
-            className="mb-4 rounded-xl bg-pale-sage border border-teal p-3 text-[13px] font-bold text-dark-teal flex items-center gap-2"
+            className="mb-4 rounded-[10px] bg-[#07192B] border border-[#00E5B8] p-3 text-[13px] font-bold text-[#00E5B8] flex items-center gap-2"
           >
-            <CheckCircle2 size={16} className="text-teal shrink-0" />
+            <CheckCircle2 size={16} className="shrink-0" />
             <span>{successMessage}</span>
           </div>
         )}
 
-        {/* 1. Camera QR Scanner Box */}
-        <div className="flex flex-col gap-3">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-teal flex items-center gap-1.5">
-              <Camera size={14} />
-              <span>Scan QR Code on TV (/umpire page)</span>
-            </span>
-            {cameraState === 'active' && (
-              <span className="text-[11px] font-semibold text-muted">
-                Point camera at TV QR
-              </span>
-            )}
-          </div>
+        {/* 1. 16:10 Camera QR Scanner Box */}
+        <div className="relative w-full aspect-[16/10] rounded-[14px] bg-[#030C18] border border-[#24425E] overflow-hidden flex items-center justify-center mt-2">
+          <video
+            ref={videoRef}
+            playsInline
+            muted
+            className={`w-full h-full object-cover ${
+              cameraState === 'active' ? 'block' : 'hidden'
+            }`}
+          />
+          <canvas ref={canvasRef} className="hidden" />
 
-          <div className="relative w-full aspect-[4/3] rounded-2xl bg-[#084B46] border-2 border-teal/30 overflow-hidden flex items-center justify-center">
-            <video
-              ref={videoRef}
-              playsInline
-              muted
-              className={`w-full h-full object-cover ${
-                cameraState === 'active' ? 'block' : 'hidden'
-              }`}
-            />
-            <canvas ref={canvasRef} className="hidden" />
-
-            {cameraState === 'active' && (
+          {cameraState === 'active' && (
+            <>
+              <div className="pointer-events-none absolute top-3.5 left-3.5 inline-flex items-center gap-2 rounded-full bg-[#0B2239]/90 border border-[#24425E] px-3 py-1 text-[11px] font-bold uppercase tracking-[0.06em] text-[#FFFFFF]">
+                <span className="h-2 w-2 rounded-full bg-[#00E5B8]" />
+                <span>SCANNER ACTIVE</span>
+              </div>
               <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-                <div className="w-44 h-44 rounded-2xl border-2 border-[#FEECD6] shadow-[0_0_0_9999px_rgba(8,75,70,0.45)]" />
+                <div className="w-40 h-40 rounded-[14px] border-2 border-[#00E5B8] shadow-[0_0_0_9999px_rgba(2,16,36,0.45)]" />
               </div>
-            )}
+            </>
+          )}
 
-            {cameraState === 'starting' && (
-              <div className="flex flex-col items-center gap-2 text-[#FEECD6] p-4 text-center">
-                <Loader2 size={28} className="animate-spin" />
-                <span className="text-xs font-semibold">
-                  Starting camera QR scanner...
-                </span>
-              </div>
-            )}
+          {cameraState === 'starting' && (
+            <div className="flex flex-col items-center gap-2.5 text-[#00E5B8] p-4 text-center">
+              <Loader2 size={28} className="animate-spin" />
+              <span className="text-[13px] font-semibold text-[#B0C4D8]">
+                Starting camera QR scanner...
+              </span>
+            </div>
+          )}
 
-            {cameraState === 'denied' && (
-              <div className="flex flex-col items-center gap-2 text-[#EAF0E5] p-6 text-center">
-                <QrCode size={32} className="text-[#FEECD6]" />
-                <span className="text-sm font-bold text-white">
-                  Camera preview unavailable
-                </span>
-                <span className="text-xs text-[#EAF0E5]/80">
-                  Enter the 6-character TV Code shown below the QR on the TV&apos;s /umpire page, or scan the TV with your phone&apos;s native camera app.
-                </span>
-              </div>
-            )}
-          </div>
+          {cameraState === 'denied' && (
+            <div className="flex flex-col items-center gap-2 text-[#B0C4D8] p-6 text-center">
+              <QrCode size={32} className="text-[#00E5B8]" />
+              <span className="text-[15px] font-bold text-[#FFFFFF]">
+                Camera preview unavailable
+              </span>
+              <span className="text-[13px] text-[#B0C4D8] max-w-xs">
+                Enter the 6-character TV Code shown below the QR on the TV&apos;s /umpire page, or scan with your native camera.
+              </span>
+            </div>
+          )}
         </div>
 
         {/* 2. Manual 6-Character TV Code Input */}
-        <form onSubmit={handleManualSubmit} className="mt-5 pt-4 border-t border-line">
+        <form onSubmit={handleManualSubmit} className="mt-5">
           <label
             htmlFor="manual-tv-code"
-            className="block text-xs font-bold uppercase tracking-wider text-dark-teal mb-2"
+            className="block text-[13px] font-bold uppercase tracking-[0.08em] text-[#D8E4F0] mb-2"
           >
-            Or Enter 6-Character TV Code from /umpire
+            Or enter 6-character TV code
           </label>
           <div className="flex items-center gap-2">
             <input
@@ -347,21 +329,21 @@ export function ProjectToScreenModal({
               onChange={(e) => setManualCode(e.target.value.toUpperCase())}
               placeholder="e.g. A4F92C"
               maxLength={12}
-              className="h-10 flex-1 min-w-0 rounded-xl bg-off-white border border-line px-3.5 text-sm font-mono font-bold uppercase tracking-widest text-dark-teal outline-none focus:border-teal"
+              className="h-[52px] flex-1 min-w-0 rounded-[10px] bg-[#07192B] border border-[#24425E] px-4 text-[17px] font-mono font-bold uppercase tracking-widest text-[#FFFFFF] placeholder:text-[#6C87A3] outline-none focus:border-[#00E5B8]"
             />
             <button
               type="submit"
               disabled={!manualCode.trim() || isSubmitting}
-              className="h-10 px-4 rounded-xl bg-teal hover:bg-forest-teal text-cream text-xs font-bold transition-colors cursor-pointer border-0 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 shrink-0"
+              className="h-[52px] px-5 rounded-[10px] bg-[#00E5B8] hover:bg-[#05DFB4] text-[#031B28] text-[15px] font-bold transition-colors cursor-pointer border-0 disabled:opacity-45 disabled:cursor-not-allowed flex items-center gap-2 shrink-0"
             >
               {isSubmitting ? (
                 <>
-                  <Loader2 size={14} className="animate-spin" />
+                  <Loader2 size={15} className="animate-spin" />
                   <span>Connecting...</span>
                 </>
               ) : (
                 <>
-                  <Tv size={14} />
+                  <Tv size={15} />
                   <span>Connect TV</span>
                 </>
               )}
@@ -370,17 +352,17 @@ export function ProjectToScreenModal({
         </form>
 
         {/* 3. Direct Open in New Tab Option */}
-        <div className="mt-4 pt-4 border-t border-line flex items-center justify-between gap-3">
-          <span className="text-xs text-muted">
-            Connected to an external monitor on this device?
+        <div className="mt-5 pt-4 border-t border-[#11263C] flex flex-col gap-2.5">
+          <span className="text-[13.5px] text-[#B0C4D8]">
+            Using an external HDMI display?
           </span>
           <button
             type="button"
             onClick={handleOpenInNewTab}
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-full bg-off-white hover:bg-pale-sage border border-line text-xs font-bold text-dark-teal transition-colors cursor-pointer shrink-0"
+            className="h-[54px] w-full inline-flex items-center justify-center gap-2 rounded-[12px] bg-[#07192B] hover:border-[#00E5B8] border border-[#24425E] text-[15px] font-bold text-[#FFFFFF] transition-colors cursor-pointer"
           >
-            <ExternalLink size={13} />
-            <span>Open Screen View Tab</span>
+            <ExternalLink size={16} />
+            <span>Open Screen View in New Tab</span>
           </button>
         </div>
       </div>

@@ -79,22 +79,6 @@ export function TeamPanel({
     ? 'SERVING'
     : 'RECEIVING';
 
-  const hintText = isMatchOver
-    ? isWinner
-      ? 'Match winner'
-      : 'Match complete'
-    : isServing
-    ? 'Tap: point won'
-    : 'Tap: fault';
-
-  const courtHintText = isMatchOver
-    ? isWinner
-      ? 'Match winner'
-      : 'Match complete'
-    : isServing
-    ? 'Tap anywhere: point won'
-    : 'Tap anywhere: fault';
-
   const ariaLabel = isMatchOver
     ? `${teamName}, ${roleText.toLowerCase()}, final score ${numericScore}. Match complete.`
     : `${teamName}, ${roleText.toLowerCase()}, score ${numericScore}${
@@ -216,11 +200,6 @@ export function TeamPanel({
       <div className="ps-pair">
         <FlipDigit value={tens} dimmed={numericScore < 10} />
         <FlipDigit value={units} />
-      </div>
-
-      <div className="ps-hint">
-        <span className="ps-hint-default">{hintText}</span>
-        <span className="ps-hint-court">{courtHintText}</span>
       </div>
     </button>
   );

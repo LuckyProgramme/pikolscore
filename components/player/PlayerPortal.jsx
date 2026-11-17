@@ -29,6 +29,7 @@ import {
 } from 'lucide-react';
 import { supabase } from '@/config/supabase';
 import AuthLoadingSplash from '@/components/auth/AuthLoadingSplash';
+import PikolScoreLogo from '@/components/ui/PikolScoreLogo';
 import FlipDigit from '@/components/scoreboard/FlipDigit';
 import { formatMmSs } from '@/hooks/useMatchTimer';
 import {
@@ -919,16 +920,9 @@ export default function PlayerPortal() {
           <div className="flex items-center justify-between mb-6">
             <Link
               href={`/role${sessionQuery}`}
-              className="flex items-center gap-3 text-2xl font-bold tracking-tight text-[#084B46] no-underline"
+              className="flex items-center no-underline"
             >
-              <svg width="36" height="36" viewBox="0 0 40 40">
-                <rect width="40" height="40" rx="12" fill="#0F5C62" />
-                <circle cx="20" cy="20" r="10" fill="#FEECD6" />
-                <circle cx="16.5" cy="16.5" r="1.6" fill="#084B46" />
-                <circle cx="23.5" cy="19" r="1.6" fill="#084B46" />
-                <circle cx="19" cy="24" r="1.6" fill="#084B46" />
-              </svg>
-              PikolScore
+              <PikolScoreLogo size="md" variant="light" />
             </Link>
             <span className="rounded-full bg-[#EAF0E5] px-3 py-1 text-xs font-bold text-[#0F5C62] border border-[#E2E5DC]">
               Player Portal
@@ -1082,16 +1076,9 @@ export default function PlayerPortal() {
         <header className="flex items-center justify-between mb-8 pb-4 border-b border-[#E2E5DC]">
           <Link
             href="/"
-            className="flex items-center gap-2.5 text-2xl font-bold tracking-tight text-[#084B46] no-underline"
+            className="flex items-center no-underline"
           >
-            <svg width="36" height="36" viewBox="0 0 40 40">
-              <rect width="40" height="40" rx="10" fill="#0F5C62" />
-              <circle cx="20" cy="20" r="8" fill="#FEECD6" />
-              <circle cx="17" cy="17" r="1.3" fill="#084B46" />
-              <circle cx="23" cy="19" r="1.3" fill="#084B46" />
-              <circle cx="19" cy="23" r="1.3" fill="#084B46" />
-            </svg>
-            PikolScore
+            <PikolScoreLogo size="md" variant="light" />
           </Link>
 
           {/* Subnav & Sign out */}

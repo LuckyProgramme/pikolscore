@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { useRouter } from 'next/navigation';
 import {
   LogOut,
   User,
@@ -21,6 +20,7 @@ import {
   saveAccountForQuickSwitch,
   detachActiveSupabaseSession,
 } from '@/lib/auth-session';
+import PikolScoreLogo from '@/components/ui/PikolScoreLogo';
 
 export function Header({
   onOpenLog,
@@ -42,7 +42,6 @@ export function Header({
   isCloudSync = false,
   ...rest
 }) {
-  const router = useRouter();
   const isPlayerProfile = profile?.role === 'player';
   const [menuOpen, setMenuOpen] = useState(false);
   const menuWrapRef = useRef(null);
@@ -86,7 +85,6 @@ export function Header({
     document.addEventListener('touchstart', handlePointerDown);
     window.addEventListener('keydown', handleKeyDown);
 
-    // Focus first enabled menu item on open
     const focusTimer = setTimeout(() => {
       const firstItem = menuListRef.current?.querySelector(
         '[role="menuitem"]:not([disabled])'
@@ -163,13 +161,11 @@ export function Header({
       } = await supabase.auth.getSession();
 
       if (session?.user) {
-        // Stamp latest activity on public.profiles before detaching
         await supabase
           .from('profiles')
           .update({ last_active_at: new Date().toISOString() })
           .eq('id', session.user.id);
 
-        // Save session credentials to pikol_saved_accounts (max 5 MRU)
         saveAccountForQuickSwitch(session, profile?.full_name);
       }
     } catch (err) {
@@ -182,9 +178,7 @@ export function Header({
           console.error('onLogout callback error:', e);
         }
       }
-      // Remove active sb-<project>-auth-token from localStorage
       detachActiveSupabaseSession();
-      // Hard redirect to wipe in-memory Supabase client state
       window.location.replace('/umpire');
     }
   };
@@ -193,23 +187,16 @@ export function Header({
     profile?.full_name || profile?.username || userEmail || (isGuestSpectator ? 'Guest' : 'Umpire');
 
   if (compactMenu) {
-    const courtSuffix = courtNumber ? ` · Court ${courtNumber}` : '';
+    const courtLabel = courtNumber ? `COURT ${courtNumber}` : null;
 
     return (
-      <header
-        className="ps-header ps-scoreboard-header"
-        {...rest}
-      >
+      <header className="ps-header ps-scoreboard-header" {...rest}>
         <div className="ps-logo">
-          <svg className="ps-logo-mark" viewBox="0 0 44 44" aria-hidden="true">
-            <rect width="44" height="44" rx="12" fill="#0F5C62" />
-            <circle cx="22" cy="22" r="12.3" fill="#FEECD6" />
-          </svg>
-          <span>PIKOLSCORE</span>
+          <PikolScoreLogo size="md" />
         </div>
 
         <div className="ps-header-right">
-          {/* Status indicator (dot only on Phone Portrait; rounded pale-sage pill on Tablet Portrait; plain dot + text on Desktop & Phone Landscape) */}
+          {/* Status cluster: 6px dot + uppercase status | COURT N */}
           <div
             className="ps-header-sync"
             title={
@@ -225,46 +212,41 @@ export function Header({
             {syncStatus === 'syncing' ? (
               <>
                 <RefreshCw
-                  size={13}
-                  className="text-[#8A3B08] motion-safe:animate-spin shrink-0"
+                  size={12}
+                  className="text-[#F4A261] motion-safe:animate-spin shrink-0"
                   aria-hidden="true"
                 />
-                <span className="ps-sync-text text-[#8A3B08]">
-                  Syncing ({pendingCount}){courtSuffix}
+                <span className="ps-sync-text text-[#F4A261]">
+                  SYNCING ({pendingCount})
                 </span>
               </>
             ) : syncStatus === 'offline' ? (
               <>
-                <span
-                  className="ps-sync-dot bg-[#5F6D66] shrink-0"
-                  aria-hidden="true"
-                />
-                <span className="ps-sync-text text-[#384640]">
-                  Offline ({pendingCount} pending){courtSuffix}
+                <span className="ps-sync-dot bg-[#6C87A3] shrink-0" aria-hidden="true" />
+                <span className="ps-sync-text text-[#B0C4D8]">
+                  OFFLINE ({pendingCount})
                 </span>
               </>
             ) : syncStatus === 'error' ? (
               <>
-                <span
-                  className="ps-sync-dot bg-error shrink-0"
-                  aria-hidden="true"
-                />
-                <span className="ps-sync-text text-error">Sync error{courtSuffix}</span>
+                <span className="ps-sync-dot bg-[#F47067] shrink-0" aria-hidden="true" />
+                <span className="ps-sync-text text-[#F47067]">SYNC ERROR</span>
               </>
             ) : (
               <>
-                <span
-                  className="ps-sync-dot bg-[#0F5C62] shrink-0"
-                  aria-hidden="true"
-                />
-                <span className="ps-sync-text">
-                  Synced{courtSuffix}
-                </span>
+                <span className="ps-sync-dot bg-[#00E5B8] shrink-0" aria-hidden="true" />
+                <span className="ps-sync-text text-[#FFFFFF]">SYNCED</span>
+              </>
+            )}
+            {courtLabel && (
+              <>
+                <span className="ps-sync-text h-3.5 w-px bg-[#24425E] mx-0.5" aria-hidden="true" />
+                <span className="ps-sync-text text-[#FFFFFF]">{courtLabel}</span>
               </>
             )}
           </div>
 
-          {/* Account Menu Button + Dropdown */}
+          {/* Account Menu Button + DinkVision Signature Dropdown */}
           <div ref={menuWrapRef} className="relative">
             <button
               ref={menuBtnRef}
@@ -272,13 +254,15 @@ export function Header({
               aria-haspopup="menu"
               aria-expanded={menuOpen}
               onClick={() => setMenuOpen((prev) => !prev)}
-              className="ps-profile-badge ps-user-pill cursor-pointer hover:bg-teal/10 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal"
+              className={`ps-profile-badge ps-user-pill cursor-pointer transition-colors hover:border-[#00E5B8] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#00E5B8] ${
+                menuOpen ? 'border-[#00E5B8]' : ''
+              }`}
             >
               <span className="max-w-[130px] truncate">{displayIdentity}</span>
               <ChevronDown
-                size={16}
-                className={`shrink-0 transition-transform duration-150 ${
-                  menuOpen ? 'rotate-180' : ''
+                size={15}
+                className={`shrink-0 text-[#B0C4D8] transition-transform duration-150 ${
+                  menuOpen ? 'rotate-180 text-[#00E5B8]' : ''
                 }`}
                 aria-hidden="true"
               />
@@ -290,7 +274,7 @@ export function Header({
                 role="menu"
                 aria-label="Account and match actions"
                 onKeyDown={handleMenuKeyDown}
-                className="absolute right-0 top-full z-40 mt-2 w-[260px] rounded-2xl border border-line bg-ivory p-2 shadow-xl"
+                className="absolute right-0 top-full z-40 mt-2 w-[260px] rounded-[14px] border border-[#24425E] bg-[#0B2239] dv-top-accent p-2 shadow-2xl"
               >
                 <button
                   type="button"
@@ -300,9 +284,9 @@ export function Header({
                     setMenuOpen(false);
                     onOpenProjectModal?.();
                   }}
-                  className="flex min-h-[48px] w-full items-center gap-3 rounded-xl px-3 text-left text-base font-semibold text-deep-green hover:bg-teal/10 disabled:opacity-40 disabled:cursor-not-allowed focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-teal cursor-pointer"
+                  className="flex min-h-[44px] w-full items-center gap-3 rounded-[10px] px-3 text-left text-[14.5px] font-semibold text-[#FFFFFF] hover:bg-[#07192B] disabled:opacity-40 disabled:cursor-not-allowed focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[#00E5B8] cursor-pointer bg-transparent border-0"
                 >
-                  <Tv size={18} className="shrink-0 text-teal" aria-hidden="true" />
+                  <Tv size={17} className="shrink-0 text-[#00E5B8]" aria-hidden="true" />
                   <span>Project to Screen</span>
                 </button>
 
@@ -315,31 +299,31 @@ export function Header({
                       setMenuOpen(false);
                       onOpenLog?.();
                     }}
-                    className="flex min-h-[48px] w-full items-center gap-3 rounded-xl px-3 text-left text-base font-semibold text-deep-green hover:bg-teal/10 disabled:opacity-40 disabled:cursor-not-allowed focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-teal cursor-pointer"
+                    className="flex min-h-[44px] w-full items-center gap-3 rounded-[10px] px-3 text-left text-[14.5px] font-semibold text-[#FFFFFF] hover:bg-[#07192B] disabled:opacity-40 disabled:cursor-not-allowed focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[#00E5B8] cursor-pointer bg-transparent border-0"
                   >
-                    <ClipboardList size={18} className="shrink-0 text-teal" aria-hidden="true" />
+                    <ClipboardList size={17} className="shrink-0 text-[#00E5B8]" aria-hidden="true" />
                     <span className="flex-1">Match log</span>
                     {logCount > 0 && (
-                      <span className="inline-flex min-w-6 h-6 items-center justify-center rounded-full bg-pale-sage px-2 text-xs font-bold text-dark-teal">
+                      <span className="inline-flex min-w-6 h-5 items-center justify-center rounded-full bg-[#00E5B8] px-2 text-[11px] font-bold text-[#031B28]">
                         {logCount}
                       </span>
                     )}
                   </button>
                 )}
 
-                <hr className="my-1.5 border-line" />
+                <hr className="my-1.5 border-[#11263C]" />
 
                 <button
                   type="button"
                   role="menuitem"
                   onClick={handleLogout}
-                  className="flex min-h-[48px] w-full items-center gap-3 rounded-xl px-3 text-left text-base font-semibold text-deep-green hover:bg-teal/10 focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-teal cursor-pointer"
+                  className="flex min-h-[44px] w-full items-center gap-3 rounded-[10px] px-3 text-left text-[14.5px] font-semibold text-[#FFFFFF] hover:bg-[#07192B] focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[#00E5B8] cursor-pointer bg-transparent border-0"
                 >
-                  <LogOut size={18} className="shrink-0 text-deep-green" aria-hidden="true" />
+                  <LogOut size={17} className="shrink-0 text-[#B0C4D8]" aria-hidden="true" />
                   <span>Sign out</span>
                 </button>
 
-                <hr className="my-1.5 border-line" />
+                <hr className="my-1.5 border-[#11263C]" />
 
                 <button
                   type="button"
@@ -349,9 +333,9 @@ export function Header({
                     setMenuOpen(false);
                     onAbandonMatch?.();
                   }}
-                  className="flex min-h-[48px] w-full items-center gap-3 rounded-xl px-3 text-left text-base font-semibold text-error hover:bg-error/10 disabled:opacity-40 disabled:cursor-not-allowed focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-error cursor-pointer"
+                  className="flex min-h-[44px] w-full items-center gap-3 rounded-[10px] px-3 text-left text-[14.5px] font-semibold text-[#F47067] hover:bg-[#F47067]/10 disabled:opacity-40 disabled:cursor-not-allowed focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[#F47067] cursor-pointer bg-transparent border-0"
                 >
-                  <AlertTriangle size={18} className="shrink-0 text-error" aria-hidden="true" />
+                  <AlertTriangle size={17} className="shrink-0 text-[#F47067]" aria-hidden="true" />
                   <span>Abandon match</span>
                 </button>
               </div>
@@ -369,27 +353,29 @@ export function Header({
           <button
             type="button"
             onClick={onBack}
-            className="ps-pill ps-pill-back flex items-center gap-1.5 px-3 py-1.5 text-sm font-semibold text-deep-green hover:bg-pale-sage transition-colors"
+            className="inline-flex h-[40px] w-[40px] sm:w-auto sm:px-3.5 items-center justify-center gap-1.5 rounded-[12px] bg-[#07192B] border border-[#24425E] text-[13px] font-semibold text-[#FFFFFF] hover:border-[#00E5B8] transition-colors cursor-pointer"
             aria-label={`Back to ${backLabel}`}
             title={`Back to ${backLabel}`}
           >
-            <ArrowLeft size={16} aria-hidden="true" />
+            <ArrowLeft size={18} aria-hidden="true" />
             <span className="hidden sm:inline">{backLabel}</span>
           </button>
         )}
         <div className="ps-logo">
-          <svg width="40" height="40" viewBox="0 0 40 40" aria-hidden="true">
-            <rect width="40" height="40" rx="12" fill="#0F5C62" />
-            <circle cx="20" cy="20" r="10" fill="#FEECD6" />
-            <circle cx="16.5" cy="16.5" r="1.6" fill="#203F39" />
-            <circle cx="23.5" cy="19" r="1.6" fill="#203F39" />
-            <circle cx="19" cy="24" r="1.6" fill="#203F39" />
-          </svg>
-          <span>PIKOLSCORE</span>
+          <PikolScoreLogo size="md" />
         </div>
       </div>
 
       <div className="ps-header-actions">
+        {/* Default status cluster when cloud sync badge isn't explicitly overriding */}
+        {!isCloudSync && (
+          <div className="hidden sm:flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.06em] text-[#FFFFFF] mr-1">
+            <span className="h-1.5 w-1.5 rounded-full bg-[#00E5B8]" aria-hidden="true" />
+            <span>COURT READY</span>
+            <span className="h-3.5 w-px bg-[#24425E] mx-1" aria-hidden="true" />
+          </div>
+        )}
+
         {/* Sync Status Badge when Cloud Sync is active */}
         {isCloudSync && !isGuestSpectator && (
           <div
@@ -406,25 +392,25 @@ export function Header({
           >
             {syncStatus === 'synced' && (
               <>
-                <CheckCircle2 size={14} className="text-[#15803D]" aria-hidden="true" />
+                <CheckCircle2 size={14} className="text-[#00E5B8]" aria-hidden="true" />
                 <span>Synced</span>
               </>
             )}
             {syncStatus === 'syncing' && (
               <>
-                <RefreshCw size={14} className="text-[#D97706] animate-spin" aria-hidden="true" />
+                <RefreshCw size={14} className="text-[#F4A261] animate-spin" aria-hidden="true" />
                 <span>Syncing ({pendingCount})</span>
               </>
             )}
             {syncStatus === 'offline' && (
               <>
-                <CloudOff size={14} className="text-[#748079]" aria-hidden="true" />
-                <span>Offline ({pendingCount} pending)</span>
+                <CloudOff size={14} className="text-[#6C87A3]" aria-hidden="true" />
+                <span>Offline ({pendingCount})</span>
               </>
             )}
             {syncStatus === 'error' && (
               <>
-                <Cloud size={14} className="text-[#BA1A1A]" aria-hidden="true" />
+                <Cloud size={14} className="text-[#F47067]" aria-hidden="true" />
                 <span>Sync error</span>
               </>
             )}
@@ -434,7 +420,7 @@ export function Header({
         {onOpenProjectModal && !isGuest && (
           <button
             type="button"
-            className="ps-pill flex items-center gap-1.5"
+            className="ps-pill"
             onClick={onOpenProjectModal}
             title="Project this court to a TV Screen"
             aria-label="Project to Screen"
@@ -447,7 +433,7 @@ export function Header({
         {onOpenQrModal && (
           <button
             type="button"
-            className="ps-pill flex items-center gap-1.5"
+            className="ps-pill"
             onClick={onOpenQrModal}
             title="Show Court QR Code"
             aria-label="Court QR Code"
@@ -460,7 +446,7 @@ export function Header({
         {onAbandonMatch && !isGuest && (
           <button
             type="button"
-            className="ps-pill text-[#BA1A1A] hover:bg-red-50 hover:border-red-300"
+            className="ps-pill text-[#F47067] hover:border-[#F47067]"
             onClick={onAbandonMatch}
             title="Abandon this match and free the court"
           >
@@ -482,8 +468,8 @@ export function Header({
         )}
 
         {displayIdentity && (
-          <div className="ps-profile-badge" title={displayIdentity}>
-            <User size={14} aria-hidden="true" />
+          <div className="ps-profile-badge hidden md:inline-flex" title={displayIdentity}>
+            <User size={14} className="text-[#00E5B8] shrink-0" aria-hidden="true" />
             <span>{displayIdentity}</span>
           </div>
         )}
@@ -491,11 +477,11 @@ export function Header({
         <button
           type="button"
           onClick={handleLogout}
-          title="Sign out of Courtside"
+          title="Sign out of PikolScore"
           className="ps-pill ps-pill-logout"
           aria-label="Sign out"
         >
-          <LogOut size={15} aria-hidden="true" />
+          <LogOut size={14} aria-hidden="true" />
           <span>Sign out</span>
         </button>
       </div>

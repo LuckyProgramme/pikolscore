@@ -5,66 +5,98 @@
 @layer base {
   input:-webkit-autofill,
   input:-webkit-autofill:focus {
-    -webkit-box-shadow: 0 0 0 1000px #FAF9F5 inset;
-    -webkit-text-fill-color: #084B46;
-    caret-color: #084B46;
+    -webkit-box-shadow: 0 0 0 1000px #07192B inset;
+    -webkit-text-fill-color: #FFFFFF;
+    caret-color: #00E5B8;
   }
 }
 
 :root {
-  /* Semantic Tokens (New Palette D) */
-  --ps-canvas: #FAF9F5;       /* off-white: page backdrop */
-  --ps-ivory: #FEFEFB;        /* ivory: header, flap cards, panels */
-  --ps-card: #EAF0E5;         /* pale-sage: serving card, timer cell */
-  --ps-white: #FEFEFB;
-  --ps-off-white: #FAF9F5;
-  --ps-border: #E2E5DC;       /* line: borders and dividers */
-  --ps-border-strong: #E2E5DC;
-  --ps-ink: #203F39;          /* deep-green: main text, backdrop */
-  --ps-ink-2: #203F39;
-  --ps-muted: #748079;        /* muted: secondary text, placeholders */
-  --ps-muted-strong: #384640; /* muted-strong: >= 7:1 operational text on light/grey surfaces */
-  --ps-teal: #0F5C62;         /* teal: primary buttons, links, active/serving states */
-  --ps-dark-teal: #084B46;    /* dark-teal: headings, wordmark, big score digits */
-  --ps-forest-teal: #085953;  /* forest-teal: primary hover, scoreboard team/server blocks */
-  --ps-sage: #8A9B82;         /* sage: accent text, quote mark, court apron */
-  --ps-pale-sage: #EAF0E5;    /* pale-sage */
-  --ps-cream: #FEECD6;        /* cream: supporting accent, replaces ball yellow */
-  --ps-line: #E2E5DC;         /* line */
-  --ps-warn: #8A3B08;         /* warn: >= 7:1 fault caption / warning text */
-  --ps-danger: #BA1A1A;       /* danger: destructive actions */
+  /* ==========================================================================
+     1. DINKVISION COLOR TOKENS
+     ========================================================================== */
+  --bg-app: #021024;
+  --bg-surface-modal: #0B2239;
+  --bg-surface-input: #07192B;
+  --bg-surface-subtle: rgba(255, 255, 255, 0.04);
+  --bg-overlay-backdrop: rgba(2, 16, 36, 0.78);
 
-  /* Serve accent */
-  --ps-serve: #FEECD6;
-  --ps-serve-ink: #084B46;
+  --color-brand-primary: #00E5B8;
+  --color-brand-primary-hover: #05DFB4;
+  --color-brand-secondary: #C5E832;
 
-  /* Receiving state */
-  --ps-grey-chip: #E2E5DC;
-  --ps-grey-chip-ink: #384640;
-  --ps-grey-digit: #5A6660;
+  --color-status-ready: #00E5B8;
+  --color-status-warning: #F4A261;
+  --color-status-error: #F47067;
 
-  /* Legacy theme aliases */
-  --color-primary: #0F5C62;
-  --color-dark: #203F39;
-  --color-sage: #EAF0E5;
-  --color-sage-border: #E2E5DC;
-  --color-white: #FEFEFB;
-  --color-lime: #FEECD6;
-  --color-muted-digits: #748079;
-  --color-bg: #FAF9F5;
+  --text-primary: #FFFFFF;
+  --text-on-brand: #031B28;
+  --text-secondary: #B0C4D8;
+  --text-label-upper: #D8E4F0;
+  --text-muted: #6C87A3;
+  --text-footer-meta: #8CA2B8;
 
-  --canvas: #FAF9F5;
-  --surface: #EAF0E5;
-  --primary: #0F5C62;
-  --ball: #FEECD6;
-  --teal: #084B46;
-  --forest: #203F39;
-  --sage: #748079;
-  --line: #E2E5DC;
-  --line-soft: #E2E5DC;
-  --jade: #8A9B82;
-  --error: #BA1A1A;
-  --font: var(--font-outfit, "Outfit"), system-ui, sans-serif;
+  --border-default: #24425E;
+  --border-divider: #11263C;
+  --border-highlight: #00E5B8;
+
+  /* ==========================================================================
+     2. TYPOGRAPHY TOKENS
+     ========================================================================== */
+  --font-display: var(--font-barlow-condensed, 'Barlow Condensed'), 'Teko', sans-serif;
+  --font-sans: var(--font-plus-jakarta, 'Plus Jakarta Sans'), 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+
+  /* ==========================================================================
+     3. SPACING & RADII TOKENS (8pt Grid)
+     ========================================================================== */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+
+  --screen-padding-x: 20px;
+  --header-height: 56px;
+
+  --radius-sm: 10px;
+  --radius-md: 12px;
+  --radius-lg: 14px;
+  --radius-xl: 20px;
+  --radius-full: 9999px;
+
+  --blur-backdrop: blur(12px);
+
+  /* Compatibility Semantic Aliases */
+  --ps-canvas: #021024;
+  --ps-ivory: #0B2239;
+  --ps-card: #07192B;
+  --ps-white: #FFFFFF;
+  --ps-off-white: #021024;
+  --ps-border: #24425E;
+  --ps-border-strong: #24425E;
+  --ps-ink: #FFFFFF;
+  --ps-ink-2: #B0C4D8;
+  --ps-muted: #6C87A3;
+  --ps-muted-strong: #B0C4D8;
+  --ps-teal: #00E5B8;
+  --ps-dark-teal: #FFFFFF;
+  --ps-forest-teal: #05DFB4;
+  --ps-sage: #6C87A3;
+  --ps-pale-sage: #0B2239;
+  --ps-cream: #031B28;
+  --ps-line: #11263C;
+  --ps-warn: #F4A261;
+  --ps-danger: #F47067;
+
+  --ps-serve: #00E5B8;
+  --ps-serve-ink: #031B28;
+  --ps-grey-chip: #021024;
+  --ps-grey-chip-ink: #B0C4D8;
+  --ps-grey-digit: #6C87A3;
+
+  --font: var(--font-sans);
 }
 
 * {
@@ -86,9 +118,38 @@ html,
 body {
   width: 100%;
   min-height: 100dvh;
-  background-color: var(--ps-canvas);
-  color: var(--ps-ink);
-  font-family: 'Outfit', system-ui, -apple-system, sans-serif;
+  background-color: var(--bg-app);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+}
+
+/* Signature DinkVision Top-Edge 2px Cyan Highlight */
+.dv-top-accent {
+  box-shadow: inset 0 2.5px 0 0 var(--border-highlight);
+}
+
+.dv-top-accent-error {
+  box-shadow: inset 0 2.5px 0 0 var(--color-status-error);
+}
+
+.dv-top-accent-lime {
+  box-shadow: inset 0 3px 0 0 var(--color-brand-secondary);
+}
+
+.dv-display {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-style: italic;
+  text-transform: uppercase;
+}
+
+.dv-overline {
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--color-brand-primary);
 }
 
 /* SCOREBOARD SHELL */
@@ -98,75 +159,81 @@ body {
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  background-color: var(--ps-canvas);
-  color: var(--ps-ink);
+  position: relative;
+  background-color: var(--bg-app);
+  color: var(--text-primary);
   padding-top: env(safe-area-inset-top, 0px);
   padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 
-/* 1. HEADER */
+/* 1. TOP NAVIGATION HEADER (56px height, 1px #11263C bottom divider) */
 .ps-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  height: 72px;
+  height: var(--header-height);
+  min-height: var(--header-height);
   flex: none;
-  padding: 0 24px;
-  border-bottom: 1px solid var(--ps-border);
-  background-color: var(--ps-ivory);
+  padding: 0 var(--screen-padding-x);
+  border-bottom: 1px solid var(--border-divider);
+  background-color: var(--bg-app);
+  position: relative;
+  z-index: 20;
 }
 
 .ps-scoreboard-header {
-  height: 80px;
-  padding: 0 28px;
-  background-color: #FEFEFB;
-  border-bottom: 1px solid #E2E5DC;
+  height: var(--header-height);
+  padding: 0 var(--screen-padding-x);
+  background-color: var(--bg-app);
+  border-bottom: 1px solid var(--border-divider);
 }
 
 .ps-logo {
   display: flex;
   align-items: center;
-  gap: 12px;
-  font-weight: 700;
-  font-size: 22px;
-  letter-spacing: 0.025em;
-  color: var(--ps-dark-teal);
+  gap: 10px;
+  font-weight: 800;
+  font-size: 20px;
+  letter-spacing: -0.02em;
+  color: var(--text-primary);
   user-select: none;
 }
 
 .ps-logo-mark {
-  width: 34px;
-  height: 34px;
+  width: 28px;
+  height: 28px;
   flex: none;
 }
 
 .ps-header-right {
   display: flex;
   align-items: center;
-  gap: 20px;
+  gap: 12px;
 }
 
 .ps-header-sync {
   display: inline-flex;
   align-items: center;
-  gap: 10px;
-  font-size: 14px;
+  gap: 6px;
+  font-size: 11px;
   font-weight: 600;
-  color: #203F39;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-primary);
   user-select: none;
 }
 
 .ps-sync-dot {
-  width: 10px;
-  height: 10px;
+  width: 6px;
+  height: 6px;
   border-radius: 9999px;
 }
 
 .ps-header-actions {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
   flex-wrap: wrap;
 }
 
@@ -174,27 +241,27 @@ body {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  height: 44px;
+  height: 40px;
   box-sizing: border-box;
-  padding: 0 22px;
-  border-radius: 9999px;
-  background-color: var(--ps-card);
-  border: 1.5px solid var(--ps-border);
-  color: var(--ps-ink);
-  font-size: 15px;
+  padding: 0 14px;
+  border-radius: var(--radius-sm);
+  background-color: var(--bg-surface-input);
+  border: 1px solid var(--border-default);
+  color: var(--text-primary);
+  font-size: 13px;
   font-weight: 600;
   max-width: 220px;
 }
 
 .ps-user-pill {
-  height: 42px;
-  padding: 0 18px;
-  border-radius: 9999px;
-  background-color: #EAF0E5;
-  border: 1.5px solid #E2E5DC;
-  color: #084B46;
-  font-size: 14px;
-  font-weight: 700;
+  height: 40px;
+  padding: 0 14px;
+  border-radius: var(--radius-sm);
+  background-color: var(--bg-surface-input);
+  border: 1px solid var(--border-default);
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 600;
 }
 
 .ps-profile-badge span {
@@ -208,40 +275,40 @@ body {
   align-items: center;
   justify-content: center;
   gap: 8px;
-  height: 44px;
+  height: 40px;
   box-sizing: border-box;
-  padding: 0 22px;
-  border-radius: 9999px;
-  border: 1.5px solid var(--ps-border);
-  background-color: var(--ps-ivory);
-  color: var(--ps-ink);
-  font-family: 'Outfit', system-ui, sans-serif;
-  font-size: 15px;
+  padding: 0 14px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-default);
+  background-color: var(--bg-surface-input);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 13px;
   font-weight: 600;
-  letter-spacing: 0.06em;
   cursor: pointer;
-  transition: background-color 0.15s ease, color 0.15s ease;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
   user-select: none;
 }
 
 .ps-pill:hover {
-  background-color: var(--ps-card);
+  background-color: var(--bg-surface-modal);
+  border-color: var(--color-brand-primary);
 }
 
 .ps-pill:focus-visible {
-  outline: 2px solid var(--ps-teal);
+  outline: 2px solid var(--color-brand-primary);
   outline-offset: 2px;
 }
 
 .ps-pill-logout {
-  color: var(--ps-ink);
+  color: var(--text-primary);
 }
 
 .ps-pill-logout:hover {
-  background-color: var(--ps-card);
+  background-color: var(--bg-surface-modal);
 }
 
-/* MAIN CONTENT & STAGE (Desktop 1440x900 baseline: space/m = 28, radius/stage = 40, radius/card = 32) */
+/* MAIN CONTENT & STAGE */
 .ps-main {
   flex: 1;
   min-height: 0;
@@ -250,7 +317,9 @@ body {
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  padding: 28px;
+  padding: 20px;
+  position: relative;
+  z-index: 1;
 }
 
 .ps-stage {
@@ -259,11 +328,11 @@ body {
   width: 100%;
   display: flex;
   flex-direction: column;
-  gap: 28px;
-  padding: 28px;
-  border-radius: 40px;
-  background-color: #FEFEFB;
-  border: 1.5px solid #E2E5DC;
+  gap: 20px;
+  padding: 20px;
+  border-radius: 16px;
+  background-color: rgba(2, 16, 36, 0.72);
+  border: 1px solid var(--border-divider);
 }
 
 .ps-court-grid {
@@ -273,7 +342,7 @@ body {
   display: grid;
   grid-template-columns: 1fr 1fr;
   grid-template-rows: auto minmax(0, 1fr);
-  gap: 28px;
+  gap: 20px;
 }
 
 .ps-control-slot {
@@ -292,13 +361,13 @@ body {
 .ps-bar {
   display: flex;
   width: 100%;
-  height: 99px;
-  min-height: 99px;
+  height: 92px;
+  min-height: 92px;
   flex: none;
   box-sizing: border-box;
-  border-radius: 24px;
-  background-color: #FEFEFB;
-  border: 1.5px solid #E2E5DC;
+  border-radius: var(--radius-lg);
+  background-color: var(--bg-surface-input);
+  border: 1px solid var(--border-default);
   overflow: hidden;
 }
 
@@ -310,13 +379,13 @@ body {
   gap: 10px;
   border: 0;
   background: transparent;
-  font-family: 'Outfit', system-ui, sans-serif;
-  font-weight: 600;
-  font-size: 18px;
+  font-family: var(--font-sans);
+  font-weight: 700;
+  font-size: 16px;
   padding: 8px 16px;
   height: 100%;
   min-height: 44px;
-  color: #203F39;
+  color: var(--text-primary);
   cursor: pointer;
   user-select: none;
   transition: background-color 0.15s ease, color 0.15s ease, opacity 0.15s ease;
@@ -324,27 +393,28 @@ body {
 
 .ps-bar-btn:disabled,
 .ps-bar-btn[aria-disabled="true"] {
-  opacity: 0.4;
+  color: var(--text-muted);
+  opacity: 0.55;
   cursor: not-allowed;
 }
 
 .ps-bar-btn:not(:disabled):not([aria-disabled="true"]):hover {
-  background-color: var(--ps-card);
+  background-color: rgba(255, 255, 255, 0.04);
 }
 
 .ps-bar-btn:not(:disabled):not([aria-disabled="true"]):active {
-  background-color: var(--ps-card);
+  background-color: var(--bg-surface-modal);
   transform: translateY(1px);
 }
 
 .ps-bar-btn:focus-visible {
-  outline: 2px solid var(--ps-teal);
+  outline: 2px solid var(--color-brand-primary);
   outline-offset: -4px;
 }
 
 .ps-bar-btn svg {
-  width: 22px;
-  height: 22px;
+  width: 20px;
+  height: 20px;
   fill: none;
   stroke: currentColor;
   stroke-width: 2.2;
@@ -358,33 +428,36 @@ body {
   align-items: center;
   justify-content: center;
   gap: 2px;
-  background-color: #EAF0E5;
-  border-left: 1.5px solid #E2E5DC;
-  border-right: 1.5px solid #E2E5DC;
+  background-color: var(--bg-surface-modal);
+  border-left: 1px solid var(--border-default);
+  border-right: 1px solid var(--border-default);
+  box-shadow: inset 0 2.5px 0 0 var(--color-brand-primary);
   padding: 6px 16px;
-  color: #084B46;
+  color: var(--text-primary);
 }
 
 .ps-tm {
-  font-family: 'Outfit', system-ui, sans-serif;
-  font-weight: 700;
-  font-size: 38px;
-  line-height: 1;
-  letter-spacing: -0.01em;
-  color: #084B46;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 44px;
+  line-height: 0.95;
+  letter-spacing: 0.02em;
+  color: var(--text-primary);
   font-variant-numeric: tabular-nums;
   font-feature-settings: "tnum" 1;
 }
 
 .ps-tl {
-  font-family: 'Outfit', system-ui, sans-serif;
-  font-weight: 400;
-  font-size: 14px;
-  margin-top: 2px;
-  color: #5F6D66;
+  font-family: var(--font-sans);
+  font-weight: 700;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  margin-top: 3px;
+  color: var(--color-brand-primary);
 }
 
-/* 3. TWO SCORE PANELS */
+/* 3. TWO SCORE PANELS (Serving #0B2239 + 2px #00E5B8 top edge vs Receiving #07192B) */
 .ps-team {
   grid-row: 2;
   min-height: 0;
@@ -394,77 +467,100 @@ body {
   align-items: stretch;
   gap: 12px;
   padding: 16px;
-  border-radius: 32px;
+  border-radius: 16px;
   cursor: pointer;
   user-select: none;
   text-align: left;
-  font-family: 'Outfit', system-ui, sans-serif;
+  font-family: var(--font-sans);
   outline-offset: 3px;
-  transition: background-color 0.35s ease, border-color 0.35s ease, transform 0.1s ease, opacity 0.3s ease;
+  transition: background-color 0.35s ease, border-color 0.35s ease, box-shadow 0.35s ease, transform 0.1s ease, opacity 0.3s ease;
 }
 
 .ps-team:disabled {
   cursor: default;
 }
 
-/* Serving panel (Desktop / Phone default) */
+/* Serving panel */
 .ps-team[data-serving="true"] {
   order: 0;
-  background-color: #EAF0E5;
-  border: 1.5px solid #0F5C62;
-  --digit-color: #084B46;
+  background-color: var(--bg-surface-modal);
+  border: 1px solid var(--border-default);
+  box-shadow: inset 0 2.5px 0 0 var(--color-brand-primary);
+  --digit-color: #FFFFFF;
 }
 
 .ps-team[data-serving="true"] .ps-chip {
-  background-color: #0F5C62;
-  color: #FEFEFB;
+  background-color: var(--bg-surface-input);
+  border: 1px solid var(--border-default);
+  color: var(--text-primary);
 }
 
 .ps-team[data-serving="true"] .ps-team-name {
-  color: #FEFEFB;
+  color: var(--text-primary);
 }
 
 .ps-team[data-serving="true"] .ps-server-label {
-  color: #FEECD6;
+  color: var(--color-brand-primary);
 }
 
 .ps-team[data-serving="true"] .ps-pair {
-  border: 2px solid #0F5C62;
-  background-color: #EAF0E5;
-}
-
-.ps-team[data-serving="true"] .ps-hint {
-  color: #084B46;
-}
-
-/* Receiving panel (Desktop / Phone default) */
-.ps-team[data-serving="false"] {
-  order: 1;
-  background-color: #FEFEFB;
-  border: 1.5px solid #E2E5DC;
-  --digit-color: #5F6D66;
-}
-
-.ps-team[data-serving="false"] .ps-chip {
-  background-color: #E2E5DC;
-  color: #203F39;
-}
-
-.ps-team[data-serving="false"] .ps-team-name {
-  color: #203F39;
-}
-
-.ps-team[data-serving="false"] .ps-server-label {
-  color: #203F39;
-}
-
-.ps-team[data-serving="false"] .ps-pair {
-  background-color: #FAF9F5;
+  background-color: transparent;
   border: 0;
 }
 
+.ps-team[data-serving="true"] .ps-fd {
+  --tile-bg: #07192B;
+  border: 1px solid var(--border-default);
+}
+
+.ps-team[data-serving="true"] .ps-fd[data-dimmed="true"] .ps-h span {
+  opacity: 1 !important;
+  color: var(--text-muted);
+}
+
+.ps-team[data-serving="true"] .ps-hint {
+  color: var(--color-brand-primary);
+}
+
+/* Receiving panel */
+.ps-team[data-serving="false"] {
+  order: 1;
+  background-color: var(--bg-surface-input);
+  border: 1px solid var(--border-default);
+  --digit-color: #B0C4D8;
+}
+
+.ps-team[data-serving="false"] .ps-chip {
+  background-color: var(--bg-app);
+  border: 1px solid var(--border-divider);
+  color: var(--text-secondary);
+}
+
+.ps-team[data-serving="false"] .ps-team-name {
+  color: var(--text-secondary);
+}
+
+.ps-team[data-serving="false"] .ps-server-label {
+  color: var(--text-muted);
+}
+
+.ps-team[data-serving="false"] .ps-pair {
+  background-color: transparent;
+  border: 0;
+}
+
+.ps-team[data-serving="false"] .ps-fd {
+  --tile-bg: #021024;
+  border: 1px solid var(--border-divider);
+}
+
+.ps-team[data-serving="false"] .ps-fd[data-dimmed="true"] .ps-h span {
+  opacity: 1 !important;
+  color: #3D5670;
+}
+
 .ps-team[data-serving="false"] .ps-hint {
-  color: #7A3E12;
+  color: var(--color-status-warning);
 }
 
 .ps-team:not(:disabled):active {
@@ -472,38 +568,40 @@ body {
 }
 
 .ps-team:focus-visible {
-  outline: 2px solid #0F5C62;
+  outline: 2px solid var(--color-brand-primary);
   outline-offset: 3px;
 }
 
-/* CardHeader Pill (88px on Desktop, radius/pill = 999) */
+/* Card Header Strip */
 .ps-chip {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  height: 88px;
+  height: 74px;
   width: 100%;
   flex: none;
-  padding: 0 12px 0 24px;
-  border-radius: 9999px;
-  transition: background-color 0.35s ease, color 0.35s ease;
+  padding: 0 12px 0 20px;
+  border-radius: var(--radius-md);
+  transition: background-color 0.35s ease, color 0.35s ease, border-color 0.35s ease;
 }
 
 .ps-chip-left {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 12px;
   min-width: 0;
   flex: 1;
 }
 
 .ps-team-name {
-  font-weight: 700;
-  font-size: 22px;
-  letter-spacing: 0.04em;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-style: italic;
+  font-size: 28px;
+  letter-spacing: 0.02em;
   text-transform: uppercase;
-  line-height: 1.1;
+  line-height: 1.05;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -513,13 +611,13 @@ body {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  height: 36px;
+  height: 34px;
   max-width: 180px;
   padding: 0 14px;
-  border-radius: 9999px;
-  background-color: #FEECD6;
-  color: #084B46;
-  font-size: 16px;
+  border-radius: var(--radius-sm);
+  background-color: var(--color-brand-primary);
+  color: var(--text-on-brand);
+  font-size: 14px;
   font-weight: 700;
   letter-spacing: 0;
   white-space: nowrap;
@@ -531,57 +629,58 @@ body {
 .ps-chip-right {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   flex: none;
   margin-left: auto;
 }
 
 .ps-server-label {
-  font-weight: 600;
-  font-size: 13px;
-  letter-spacing: 0.11em;
+  font-weight: 700;
+  font-size: 11.5px;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
 }
 
 .ps-server-tile {
   display: grid;
   place-items: center;
-  width: 64px;
-  height: 64px;
-  border-radius: 18px;
-  font-weight: 700;
-  font-size: 28px;
+  width: 52px;
+  height: 52px;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 30px;
   line-height: 1;
   transition: all 0.25s ease;
 }
 
 .ps-server-tile[data-active="true"] {
-  background-color: #FEECD6;
-  color: #084B46;
+  background-color: var(--color-brand-primary);
+  color: var(--text-on-brand);
   border: 0;
 }
 
 .ps-server-tile[data-active="false"] {
   background-color: transparent;
-  color: #5F6D66;
-  font-size: 22px;
+  color: var(--text-muted);
+  font-size: 24px;
   font-weight: 600;
-  border: 1.5px dashed #5F6D66;
+  border: 1.5px dashed var(--border-default);
 }
 
-/* DigitWell (Pair of FlipDigits filling remaining card height) */
+/* DigitWell */
 .ps-pair {
   display: flex;
   flex: 1;
   width: 100%;
   min-height: 0;
-  gap: 12px;
-  padding: 12px;
-  border-radius: 26px;
+  gap: 14px;
+  padding: 0;
+  border-radius: var(--radius-lg);
   transition: border-color 0.35s ease, background-color 0.35s ease;
 }
 
-/* DigitTile (Fill well, ivory #FEFEFB, 1px middle line at 10% opacity, digit font min(0.8 * tileH, 1.1 * tileW)) */
+/* DigitTile */
 .ps-fd {
   position: relative;
   flex: 1;
@@ -589,9 +688,9 @@ body {
   min-height: 0;
   perspective: 600px;
   container-type: size;
-  --tile-bg: #FEFEFB;
-  border-radius: 22px;
-  border: 1px solid #E2E5DC;
+  --tile-bg: #07192B;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-default);
 }
 
 .ps-h {
@@ -613,11 +712,11 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-family: 'Outfit', system-ui, sans-serif;
-  font-weight: 700;
-  font-size: min(80cqh, 110cqw);
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: min(84cqh, 118cqw);
   line-height: 1;
-  letter-spacing: -0.03em;
+  letter-spacing: -0.02em;
   font-variant-numeric: tabular-nums;
   font-feature-settings: "tnum" 1;
   color: var(--digit-color);
@@ -627,15 +726,15 @@ body {
 .ps-t,
 .ps-ft {
   top: 0;
-  border-radius: 21px 21px 0 0;
-  border-bottom: 1px solid rgba(8, 75, 70, 0.1);
+  border-radius: 13px 13px 0 0;
+  border-bottom: 1.5px solid var(--border-divider);
   transform-origin: 50% 100%;
 }
 
 .ps-b,
 .ps-fb {
   bottom: 0;
-  border-radius: 0 0 21px 21px;
+  border-radius: 0 0 13px 13px;
   transform-origin: 50% 0%;
 }
 
@@ -659,10 +758,12 @@ body {
   width: 100%;
   flex: none;
   text-align: center;
-  font-size: 15px;
-  font-weight: 600;
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
   margin-top: 0;
-  min-height: 20px;
+  min-height: 18px;
   line-height: 1.2;
   transition: color 0.35s ease;
 }
@@ -675,104 +776,53 @@ body {
   display: none;
 }
 
-/* 4. CALL ROW (Team-name block + SERVER block) */
-.ps-callrow {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: stretch;
-  justify-content: center;
-  gap: 16px;
-  height: 88px;
-  flex: none;
-  width: min(100%, 860px);
-}
-
-.ps-flap {
-  width: 420px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 22px;
-  background-color: #085953;
-  color: #FEFEFB;
-  transition: background-color 0.4s ease;
-}
-
-.ps-flap-name {
-  display: inline-block;
-  font-family: 'Outfit', system-ui, sans-serif;
-  font-weight: 700;
-  font-size: clamp(20px, 3vw, 30px);
-  letter-spacing: 0.3em;
-  color: #FEFEFB;
-}
-
-.ps-srv {
-  width: 230px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 16px;
-  border-radius: 22px;
-  background-color: #085953;
-  color: #FEFEFB;
-  transition: background-color 0.4s ease;
-}
-
-.ps-srv-label {
-  font-family: 'Outfit', system-ui, sans-serif;
-  font-weight: 600;
-  font-size: 14px;
-  letter-spacing: 0.16em;
-  color: #FEECD6;
-}
-
-/* Server digit tile uses cream background and dark-teal digit */
+/* Server digit tile on TV ScreenView */
 .ps-fd.ps-fd-sm {
   flex: none;
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 58px;
-  height: 64px;
-  border-radius: 14px;
-  --tile-bg: #FEECD6;
-  --digit-color: #084B46;
+  width: 176px;
+  height: 248px;
+  border-radius: 18px;
+  border: 0;
+  --tile-bg: #00E5B8;
+  --digit-color: #031B28;
 }
 
 .ps-fd.ps-fd-sm .ps-h span {
-  font-size: 42px;
+  font-size: 190px;
   font-weight: 800;
 }
 
 .ps-fd.ps-fd-sm .ps-t,
 .ps-fd.ps-fd-sm .ps-ft {
-  border-bottom: 1px solid rgba(8, 75, 70, 0.15);
-  border-radius: 14px 14px 0 0;
+  border-bottom: 2px solid rgba(3, 27, 40, 0.22);
+  border-radius: 18px 18px 0 0;
 }
 
 .ps-fd.ps-fd-sm .ps-b,
 .ps-fd.ps-fd-sm .ps-fb {
-  border-radius: 0 0 14px 14px;
+  border-radius: 0 0 18px 18px;
 }
 
 /* 5. FOOTER STRIP */
 .ps-footer {
-  border-top: 1px solid #E2E5DC;
+  border-top: 1px solid var(--border-divider);
   padding: 14px 16px;
   text-align: center;
   font-size: 13px;
   font-weight: 500;
-  color: #748079;
-  background-color: #FAF9F5;
+  color: var(--text-footer-meta);
+  background-color: var(--bg-app);
 }
 
 /* MATCH LOG SLIDE-OVER & SCRIM */
 .ps-scrim {
   position: fixed;
   inset: 0;
-  background-color: rgba(32, 63, 57, 0.35);
-  backdrop-filter: blur(8px);
+  background-color: var(--bg-overlay-backdrop);
+  backdrop-filter: var(--blur-backdrop);
   z-index: 40;
 }
 
@@ -782,10 +832,10 @@ body {
   right: 0;
   bottom: 0;
   width: min(380px, 100%);
-  background-color: #FEFEFB;
-  border-left: 1px solid #E2E5DC;
-  box-shadow: 0 20px 32px -8px rgba(8, 75, 70, 0.16);
-  padding: calc(16px + env(safe-area-inset-top, 0px)) 20px 20px;
+  background-color: var(--bg-surface-modal);
+  border-left: 1px solid var(--border-default);
+  box-shadow: inset 0 2.5px 0 0 var(--color-brand-primary), -16px 0 40px rgba(1, 8, 20, 0.65);
+  padding: calc(20px + env(safe-area-inset-top, 0px)) 20px 20px;
   overflow-y: auto;
   z-index: 50;
 }
@@ -794,46 +844,61 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 14px;
+  margin-bottom: 16px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--border-divider);
+  font-family: var(--font-display);
   font-weight: 800;
-  font-size: 18px;
-  color: #084B46;
+  font-style: italic;
+  text-transform: uppercase;
+  font-size: 28px;
+  color: var(--text-primary);
 }
 
 .ps-log-list {
   list-style: none;
   margin: 0;
   padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 
 .ps-log-item,
 .ps-log-empty {
   display: flex;
   gap: 10px;
-  align-items: baseline;
-  padding: 11px 0;
-  border-bottom: 1px solid #E2E5DC;
-  font-size: 14px;
-  color: #203F39;
+  align-items: center;
+  padding: 12px 14px;
+  border-radius: var(--radius-sm);
+  background-color: var(--bg-surface-input);
+  border: 1px solid var(--border-default);
+  font-size: 13.5px;
+  color: var(--text-primary);
 }
 
 .ps-log-empty {
-  color: #748079;
+  color: var(--text-secondary);
+  justify-content: center;
 }
 
 .ps-log-item b {
-  font-family: 'Outfit', system-ui, sans-serif;
-  font-weight: 600;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-weight: 700;
   font-size: 12px;
-  color: #748079;
+  color: var(--color-brand-primary);
   font-variant-numeric: tabular-nums;
   font-feature-settings: "tnum" 1;
 }
 
 .ps-log-item span {
   margin-left: auto;
-  font-weight: 800;
-  color: #084B46;
+  padding: 3px 9px;
+  border-radius: 6px;
+  background-color: rgba(0, 229, 184, 0.16);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--color-brand-primary);
   font-variant-numeric: tabular-nums;
   font-feature-settings: "tnum" 1;
   white-space: nowrap;
@@ -846,19 +911,19 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 16px;
+  padding: 14px;
   z-index: 60;
 }
 
 .ps-victory-card {
   position: relative;
   z-index: 70;
-  width: min(440px, 100%);
-  background-color: #FEFEFB;
-  border: 1.5px solid #E2E5DC;
-  border-radius: 28px;
-  padding: 32px 24px 24px;
-  box-shadow: 0 28px 60px -12px rgba(8, 75, 70, 0.35);
+  width: min(460px, 100%);
+  background-color: var(--bg-surface-modal);
+  border: 1px solid var(--border-default);
+  box-shadow: inset 0 2.5px 0 0 var(--color-brand-primary), 0 28px 60px -12px rgba(1, 8, 20, 0.72);
+  border-radius: var(--radius-xl);
+  padding: 28px 24px 24px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -881,12 +946,12 @@ body {
   position: absolute;
   top: 16px;
   right: 16px;
-  width: 34px;
-  height: 34px;
-  border-radius: 999px;
-  border: 1px solid #E2E5DC;
-  background-color: #EAF0E5;
-  color: #748079;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-default);
+  background-color: var(--bg-surface-input);
+  color: var(--text-primary);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -895,36 +960,37 @@ body {
 }
 
 .ps-modal-close-btn:hover {
-  color: #084B46;
-  border-color: #0F5C62;
-  background-color: #FEFEFB;
+  border-color: var(--color-brand-primary);
+  color: var(--color-brand-primary);
 }
 
 .ps-victory-trophy-wrap {
   position: relative;
-  width: 76px;
-  height: 76px;
+  width: 68px;
+  height: 68px;
   border-radius: 50%;
-  background: radial-gradient(circle, #FEECD6 0%, #EAF0E5 100%);
-  border: 2px solid #0F5C62;
+  background: var(--bg-surface-input);
+  border: 1.5px solid var(--color-brand-primary);
   display: flex;
   align-items: center;
   justify-content: center;
   margin-bottom: 16px;
-  box-shadow: 0 10px 24px -4px rgba(15, 92, 98, 0.2);
 }
 
 .ps-victory-trophy {
-  color: #085953;
+  color: var(--color-brand-primary);
 }
 
 .ps-victory-title {
-  font-family: 'Outfit', system-ui, sans-serif;
-  font-size: 24px;
+  font-family: var(--font-display);
+  font-size: 34px;
   font-weight: 800;
-  color: #084B46;
+  font-style: italic;
+  text-transform: uppercase;
+  line-height: 1.05;
+  color: var(--text-primary);
   margin: 0 0 16px;
-  letter-spacing: -0.02em;
+  letter-spacing: 0.01em;
 }
 
 .ps-victory-scoreboard {
@@ -932,28 +998,28 @@ body {
   align-items: center;
   justify-content: center;
   gap: 16px;
-  background-color: #EAF0E5;
-  border: 1px solid #E2E5DC;
-  border-radius: 18px;
-  padding: 12px 24px;
+  background-color: var(--bg-surface-input);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  padding: 14px 24px;
   width: 100%;
-  margin-bottom: 10px;
+  margin-bottom: 12px;
 }
 
 .ps-victory-team-box {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 2px;
+  gap: 4px;
   flex: 1;
 }
 
 .ps-victory-team-name {
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 700;
-  color: #748079;
+  color: var(--text-muted);
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.08em;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -961,24 +1027,26 @@ body {
 }
 
 .ps-victory-team-score {
-  font-size: 34px;
-  font-weight: 900;
-  color: #084B46;
+  font-family: var(--font-display);
+  font-size: 46px;
+  font-weight: 800;
+  color: var(--text-primary);
   font-variant-numeric: tabular-nums;
   line-height: 1;
 }
 
 .ps-victory-score-divider {
-  font-size: 26px;
-  font-weight: 700;
-  color: #E2E5DC;
+  font-family: var(--font-display);
+  font-size: 34px;
+  font-weight: 800;
+  color: var(--text-muted);
 }
 
 .ps-victory-detail {
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 500;
-  color: #748079;
-  margin: 0 0 22px;
+  color: var(--text-secondary);
+  margin: 0 0 20px;
 }
 
 .ps-victory-actions {
@@ -994,20 +1062,20 @@ body {
   justify-content: center;
   gap: 8px;
   width: 100%;
-  padding: 14px 20px;
-  border-radius: 14px;
-  background-color: #0F5C62;
-  color: #FEECD6;
+  height: 54px;
+  padding: 0 20px;
+  border-radius: var(--radius-md);
+  background-color: var(--color-brand-primary);
+  color: var(--text-on-brand);
   font-weight: 700;
-  font-size: 15px;
+  font-size: 16px;
   border: none;
   cursor: pointer;
-  box-shadow: 0 4px 12px rgba(15, 92, 98, 0.25);
   transition: transform 0.15s ease, background-color 0.15s ease;
 }
 
 .ps-victory-btn-primary:hover {
-  background-color: #085953;
+  background-color: var(--color-brand-primary-hover);
 }
 
 .ps-victory-btn-primary:active {
@@ -1020,34 +1088,34 @@ body {
   justify-content: center;
   gap: 8px;
   width: 100%;
-  padding: 11px 18px;
-  border-radius: 14px;
-  background-color: #FAF9F5;
-  color: #203F39;
-  font-weight: 600;
-  font-size: 14px;
-  border: 1px solid #E2E5DC;
+  height: 52px;
+  padding: 0 18px;
+  border-radius: var(--radius-md);
+  background-color: var(--bg-surface-input);
+  color: var(--text-primary);
+  font-weight: 700;
+  font-size: 15px;
+  border: 1px solid var(--border-default);
   cursor: pointer;
   transition: all 0.15s ease;
 }
 
 .ps-victory-btn-secondary:hover {
-  background-color: #EAF0E5;
+  border-color: var(--color-brand-primary);
 }
 
 .ps-victory-btn-tertiary {
   background: none;
   border: none;
-  color: #748079;
+  color: var(--text-secondary);
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
   padding: 6px;
-  transition: color 0.15s ease;
 }
 
 .ps-victory-btn-tertiary:hover {
-  color: #203F39;
+  color: var(--color-brand-primary);
   text-decoration: underline;
 }
 
@@ -1058,20 +1126,13 @@ body {
   width: min(840px, 100%);
   margin: 0 auto 12px;
   padding: 10px 18px;
-  border-radius: 12px;
-  background-color: #EAF0E5;
-  border: 1.5px solid #0F5C62;
-  color: #084B46;
+  border-radius: var(--radius-md);
+  background-color: var(--bg-surface-modal);
+  border: 1px solid var(--color-brand-primary);
+  color: var(--text-primary);
   font-size: 13px;
   font-weight: 700;
   cursor: pointer;
-  box-shadow: 0 4px 14px -3px rgba(8, 75, 70, 0.12);
-  transition: all 0.15s ease;
-}
-
-.ps-victory-reopen-bar:hover {
-  background-color: #0F5C62;
-  color: #FEECD6;
 }
 
 /* SCREEN READER LIVE REGION */
@@ -1084,65 +1145,26 @@ body {
   white-space: nowrap;
 }
 
-/* RESPONSIVE BREAKPOINTS (1:1 with the 4 Figma Review Frames) */
+/* RESPONSIVE BREAKPOINTS */
 
-/* 1. TABLET PORTRAIT — "COURT VIEW" (e.g. 1032x1376 iPad Pro 13 & 820x1180 iPad Air) */
+/* 1. TABLET PORTRAIT — COURT VIEW */
 @media (min-width: 640px) and (max-width: 1099px) and (orientation: portrait) {
   .ps-scoreboard-header {
-    height: clamp(78px, 7vh, 96px);
-    padding: 0 clamp(28px, 3.88vw, 40px);
-    background-color: #FAF9F5;
-    border-bottom: 0;
-  }
-
-  .ps-logo {
-    gap: 16px;
-    font-size: clamp(24px, 2.9vw, 30px);
-    font-weight: 700;
-    letter-spacing: 0.03em;
-    color: #084B46;
-  }
-
-  .ps-logo-mark {
-    width: clamp(38px, 4.26vw, 44px);
-    height: clamp(38px, 4.26vw, 44px);
-  }
-
-  .ps-header-right {
-    gap: 12px;
-  }
-
-  .ps-header-sync {
-    height: 44px;
-    padding: 0 20px;
-    border-radius: 9999px;
-    background-color: #EAF0E5;
-    font-size: clamp(15px, 1.74vw, 18px);
-    font-weight: 500;
-    color: #203F39;
-    gap: 10px;
-  }
-
-  .ps-user-pill {
-    height: 44px;
-    padding: 0 22px;
-    border-radius: 9999px;
-    background-color: #EAF0E5;
-    border: 0;
-    font-size: clamp(15px, 1.74vw, 18px);
-    font-weight: 500;
-    color: #203F39;
+    height: clamp(64px, 6.5vh, 78px);
+    padding: 0 24px;
+    background-color: var(--bg-app);
+    border-bottom: 1px solid var(--border-divider);
   }
 
   .ps-main {
-    padding: 0 clamp(20px, 3.1vw, 32px) clamp(20px, 3.1vw, 32px);
+    padding: 20px;
   }
 
   .ps-stage {
-    background-color: #EAF0E5;
-    border: 0;
-    border-radius: 40px;
-    padding: clamp(16px, 2.32vw, 24px);
+    background-color: rgba(7, 25, 43, 0.55);
+    border: 1px solid var(--border-divider);
+    border-radius: 20px;
+    padding: 16px;
     gap: 0;
   }
 
@@ -1152,7 +1174,6 @@ body {
     gap: 0;
   }
 
-  /* Serving team always in top court half (order 1: Point Won), Net Bar in middle (order 2), Receiving team in bottom court half (order 3: Fault) */
   .ps-team[data-serving="true"] {
     order: 1 !important;
     flex: 1;
@@ -1163,7 +1184,7 @@ body {
 
   .ps-control-slot {
     order: 2 !important;
-    height: clamp(92px, 8.72vh, 120px);
+    height: clamp(88px, 8.2vh, 108px);
     flex: none;
     display: flex;
     align-items: center;
@@ -1180,7 +1201,7 @@ body {
     z-index: 1;
   }
 
-  /* Dashed Net Line + 22px #203F39 Net Posts */
+  /* Dashed Net Line + Net Posts */
   .ps-net-line {
     display: flex;
     align-items: center;
@@ -1191,208 +1212,78 @@ body {
   }
 
   .ps-net-post {
-    width: 22px;
-    height: 22px;
+    width: 18px;
+    height: 18px;
     border-radius: 9999px;
-    background-color: #203F39;
+    background-color: var(--color-brand-primary);
     flex: none;
   }
 
   .ps-net-cord {
     flex: 1;
     height: 0;
-    border-top: 3px dashed #8A9B82;
+    border-top: 2px dashed var(--border-default);
   }
 
-  /* ControlPill (760x92 max, fully rounded, #FEFEFB, tonal segments with no strokes) */
   .ps-bar {
     position: relative;
     z-index: 1;
-    width: min(760px, 86%);
-    height: clamp(72px, 6.68vh, 92px);
+    width: min(740px, 88%);
+    height: clamp(68px, 6.5vh, 84px);
     min-height: 0;
     border-radius: 9999px;
-    background-color: #FEFEFB;
-    border: 0;
-    box-shadow: none;
+    background-color: var(--bg-surface-input);
+    border: 1px solid var(--border-default);
   }
 
   .ps-bar-btn {
     flex: 1;
-    font-size: clamp(18px, 2.32vw, 24px);
-    font-weight: 500;
-    color: #203F39;
-  }
-
-  .ps-bar-btn:disabled,
-  .ps-bar-btn[aria-disabled="true"] {
-    opacity: 1;
-    color: #8A9B82;
+    font-size: clamp(16px, 2.2vw, 20px);
   }
 
   .ps-timer-btn {
     flex: 1.5;
-    background-color: #EAF0E5;
-    border-left: 0;
-    border-right: 0;
+    background-color: var(--bg-surface-modal);
   }
 
   .ps-tm {
-    font-size: clamp(32px, 4.26vw, 44px);
-    font-weight: 700;
-    color: #084B46;
+    font-size: clamp(30px, 4vw, 40px);
   }
 
   .ps-tl {
-    font-size: clamp(13px, 1.55vw, 16px);
-    font-weight: 400;
-    color: #4E5C55;
+    font-size: 11px;
   }
 
-  /* Team Cards in Court View (Tonal surfaces, no borders) */
   .ps-team {
-    padding: clamp(16px, 1.94vw, 20px);
-    gap: clamp(12px, 1.4vh, 16px);
-    border-radius: 32px;
-    border: 0 !important;
+    padding: 16px;
+    gap: 12px;
+    border-radius: 16px;
   }
 
-  /* Lit Serving State (#084B46 card, #0F5C62 header pill, #FEFEFB flap tiles) */
-  .ps-team[data-serving="true"] {
-    background-color: #084B46;
-    --digit-color: #084B46;
+  .ps-chip {
+    height: clamp(66px, 6vh, 78px);
+    border-radius: 12px;
+    padding: 0 14px 0 20px;
   }
 
-  .ps-team[data-serving="true"] .ps-chip {
-    height: clamp(72px, 6.4vh, 88px);
-    border-radius: 28px;
-    background-color: #0F5C62;
-    padding: 0 20px 0 28px;
+  .ps-team-name {
+    font-size: clamp(24px, 3vw, 32px);
   }
 
-  .ps-team[data-serving="true"] .ps-team-name {
-    font-size: clamp(26px, 3.3vw, 34px);
-    letter-spacing: 0.03em;
-    color: #FEFEFB;
-  }
-
-  .ps-team[data-serving="true"] .ps-active-player-chip {
+  .ps-active-player-chip {
     height: 32px;
-    padding: 4px 14px;
-    font-size: 18px;
-    font-weight: 600;
-    background-color: #FEECD6;
-    color: #084B46;
+    font-size: 15px;
   }
 
-  .ps-team[data-serving="true"] .ps-server-label {
-    font-size: 16px;
-    font-weight: 600;
-    letter-spacing: 0.12em;
-    color: #CFE0D4;
+  .ps-server-label {
+    font-size: 13px;
   }
 
-  .ps-team[data-serving="true"] .ps-server-tile {
-    width: 64px;
-    height: 64px;
-    border-radius: 18px;
-    background-color: #FEECD6;
-    color: #084B46;
-    font-size: 40px;
-    font-weight: 700;
-    border: 0;
-  }
-
-  .ps-team[data-serving="true"] .ps-pair {
-    padding: 0;
-    border: 0;
-    background-color: transparent;
-    gap: 16px;
-  }
-
-  .ps-team[data-serving="true"] .ps-fd {
-    --tile-bg: #FEFEFB;
-    border: 0;
-    border-radius: 28px;
-  }
-
-  .ps-team[data-serving="true"] .ps-hint {
-    font-size: clamp(16px, 1.94vw, 20px);
-    font-weight: 500;
-    color: #CFE0D4;
-  }
-
-  /* Quiet Receiving State (#E2E5DC card, #F4F6F0 header pill & flap tiles) */
-  .ps-team[data-serving="false"] {
-    background-color: #E2E5DC;
-    --digit-color: #4E5C55;
-  }
-
-  .ps-team[data-serving="false"] .ps-chip {
-    height: clamp(72px, 6.4vh, 88px);
-    border-radius: 28px;
-    background-color: #F4F6F0;
-    padding: 0 20px 0 28px;
-  }
-
-  .ps-team[data-serving="false"] .ps-team-name {
-    font-size: clamp(26px, 3.3vw, 34px);
-    letter-spacing: 0.03em;
-    color: #203F39;
-  }
-
-  .ps-team[data-serving="false"] .ps-server-label {
-    font-size: 16px;
-    font-weight: 600;
-    letter-spacing: 0.12em;
-    color: #4E5C55;
-  }
-
-  .ps-team[data-serving="false"] .ps-server-tile {
-    width: 64px;
-    height: 64px;
-    border-radius: 18px;
-    background-color: transparent;
-    border: 2px dashed #8A9B82;
-    color: #4E5C55;
+  .ps-server-tile {
+    width: 54px;
+    height: 54px;
+    border-radius: 10px;
     font-size: 32px;
-    font-weight: 600;
-  }
-
-  .ps-team[data-serving="false"] .ps-pair {
-    padding: 0;
-    border: 0;
-    background-color: transparent;
-    gap: 16px;
-  }
-
-  .ps-team[data-serving="false"] .ps-fd {
-    --tile-bg: #F4F6F0;
-    border: 0;
-    border-radius: 28px;
-  }
-
-  .ps-team[data-serving="false"] .ps-fd[data-dimmed="true"] .ps-h span {
-    opacity: 1 !important;
-    color: #BCC4BA;
-  }
-
-  .ps-team[data-serving="false"] .ps-hint {
-    font-size: clamp(16px, 1.94vw, 20px);
-    font-weight: 500;
-    color: #4E5C55;
-  }
-
-  /* 2px #E2E5DC flap seam & 28px tile radius on Tablet Portrait */
-  .ps-t,
-  .ps-ft {
-    border-radius: 28px 28px 0 0;
-    border-bottom: 2px solid #E2E5DC;
-  }
-
-  .ps-b,
-  .ps-fb {
-    border-radius: 0 0 28px 28px;
   }
 
   .ps-h span {
@@ -1408,25 +1299,15 @@ body {
   }
 }
 
-/* 2. PHONE PORTRAIT (390x844: Stacked cards, Serving on top, Header 64 dot-only, Bar 64, Pill 56, Chip 44, space/m 16) */
+/* 2. PHONE PORTRAIT (390x844) */
 @media (max-width: 639px) and (orientation: portrait) {
   .ps-scoreboard-header {
-    height: 64px;
+    height: 56px;
     padding: 0 16px;
   }
 
-  .ps-logo {
-    font-size: 18px;
-    gap: 12px;
-  }
-
-  .ps-logo-mark {
-    width: 28px;
-    height: 28px;
-  }
-
   .ps-header-right {
-    gap: 14px;
+    gap: 10px;
   }
 
   .ps-sync-text {
@@ -1434,30 +1315,31 @@ body {
   }
 
   .ps-sync-dot {
-    width: 12px;
-    height: 12px;
+    width: 8px;
+    height: 8px;
   }
 
   .ps-user-pill {
     height: 36px;
-    padding: 0 14px;
-    font-size: 14px;
+    padding: 0 12px;
+    font-size: 13px;
   }
 
   .ps-main {
-    padding: 16px;
+    padding: 12px 16px 16px;
   }
 
   .ps-stage {
-    padding: 16px;
-    gap: 10px;
-    border-radius: 28px;
+    padding: 0;
+    gap: 12px;
+    border: 0;
+    background-color: transparent;
   }
 
   .ps-court-grid {
     display: flex;
     flex-direction: column;
-    gap: 16px;
+    gap: 12px;
   }
 
   .ps-control-slot {
@@ -1478,9 +1360,9 @@ body {
   }
 
   .ps-bar {
-    height: 64px;
-    min-height: 64px;
-    border-radius: 24px;
+    height: 68px;
+    min-height: 68px;
+    border-radius: var(--radius-md);
   }
 
   .ps-bar-btn {
@@ -1495,48 +1377,50 @@ body {
   }
 
   .ps-tm {
-    font-size: 24px;
+    font-size: 30px;
   }
 
   .ps-tl {
-    font-size: 11px;
+    font-size: 9.5px;
   }
 
   .ps-team {
-    padding: 10px;
-    gap: 6px;
-    border-radius: 24px;
+    padding: 12px;
+    gap: 8px;
+    border-radius: var(--radius-lg);
   }
 
   .ps-chip {
-    height: 56px;
-    padding: 0 6px 0 18px;
+    height: 52px;
+    padding: 0 8px 0 14px;
+    border-radius: var(--radius-sm);
   }
 
   .ps-chip-left {
-    gap: 10px;
+    gap: 8px;
   }
 
   .ps-team-name {
-    font-size: 16px;
+    font-size: 22px;
   }
 
   .ps-active-player-chip {
     height: 26px;
     padding: 0 10px;
-    font-size: 13px;
-    max-width: 120px;
+    font-size: 12px;
+    max-width: 112px;
+    border-radius: 8px;
   }
 
   .ps-server-label {
-    font-size: 11px;
+    display: none;
   }
 
   .ps-server-tile {
-    width: 44px;
-    height: 44px;
-    border-radius: 13px;
-    font-size: 20px;
+    width: 38px;
+    height: 38px;
+    border-radius: 8px;
+    font-size: 22px;
   }
 
   .ps-server-tile[data-active="false"] {
@@ -1544,66 +1428,54 @@ body {
   }
 
   .ps-pair {
-    padding: 8px;
-    gap: 8px;
-    border-radius: 18px;
+    gap: 10px;
   }
 
   .ps-fd {
-    border-radius: 16px;
+    border-radius: var(--radius-md);
   }
 
   .ps-t,
   .ps-ft {
-    border-radius: 15px 15px 0 0;
+    border-radius: 11px 11px 0 0;
   }
 
   .ps-b,
   .ps-fb {
-    border-radius: 0 0 15px 15px;
+    border-radius: 0 0 11px 11px;
   }
 
   .ps-hint {
-    font-size: 13px;
+    font-size: 12px;
     min-height: 16px;
   }
 }
 
-/* 3. PHONE LANDSCAPE (844x390: Side by side cards, Header 52, Bar 54, Pill 68, Chip 64, tighter vertical gaps) */
+/* 3. PHONE LANDSCAPE (844x390) */
 @media (max-height: 540px) and (orientation: landscape) {
   .ps-scoreboard-header {
-    height: 52px;
+    height: 48px;
     padding: 0 16px;
   }
 
-  .ps-logo {
-    font-size: 18px;
-    gap: 12px;
-  }
-
-  .ps-logo-mark {
-    width: 28px;
-    height: 28px;
-  }
-
   .ps-header-right {
-    gap: 14px;
+    gap: 10px;
   }
 
   .ps-user-pill {
-    height: 36px;
-    padding: 0 14px;
-    font-size: 14px;
+    height: 34px;
+    padding: 0 12px;
+    font-size: 12.5px;
   }
 
   .ps-main {
-    padding: 16px;
+    padding: 10px 16px;
   }
 
   .ps-stage {
-    padding: 16px;
+    padding: 10px;
     gap: 10px;
-    border-radius: 28px;
+    border-radius: 14px;
   }
 
   .ps-court-grid {
@@ -1617,7 +1489,7 @@ body {
   .ps-bar {
     height: 54px;
     min-height: 54px;
-    border-radius: 24px;
+    border-radius: var(--radius-md);
   }
 
   .ps-bar-btn {
@@ -1632,80 +1504,78 @@ body {
   }
 
   .ps-tm {
-    font-size: 24px;
+    font-size: 26px;
   }
 
   .ps-tl {
-    font-size: 11px;
+    font-size: 9.5px;
   }
 
   .ps-team {
     padding: 10px;
     gap: 6px;
-    border-radius: 24px;
+    border-radius: var(--radius-md);
   }
 
   .ps-chip {
-    height: 68px;
-    padding: 0 4px 0 18px;
+    height: 54px;
+    padding: 0 8px 0 14px;
   }
 
   .ps-chip-left {
-    gap: 10px;
+    gap: 8px;
   }
 
   .ps-team-name {
-    font-size: 18px;
+    font-size: 20px;
   }
 
   .ps-active-player-chip {
-    height: 32px;
-    padding: 0 12px;
-    font-size: 14px;
-    max-width: 130px;
+    height: 28px;
+    padding: 0 10px;
+    font-size: 13px;
+    max-width: 120px;
   }
 
   .ps-server-label {
-    font-size: 11px;
+    font-size: 10.5px;
   }
 
   .ps-server-tile {
-    width: 64px;
-    height: 64px;
-    border-radius: 32px;
-    font-size: 28px;
-  }
-
-  .ps-server-tile[data-active="false"] {
-    width: 62px;
-    height: 62px;
-    border-radius: 31px;
+    width: 40px;
+    height: 40px;
+    border-radius: 8px;
     font-size: 22px;
   }
 
+  .ps-server-tile[data-active="false"] {
+    width: 40px;
+    height: 40px;
+    border-radius: 8px;
+    font-size: 18px;
+  }
+
   .ps-pair {
-    padding: 8px;
     gap: 8px;
-    border-radius: 18px;
   }
 
   .ps-fd {
-    border-radius: 16px;
+    border-radius: var(--radius-sm);
   }
 
   .ps-t,
   .ps-ft {
-    border-radius: 15px 15px 0 0;
+    border-radius: 9px 9px 0 0;
   }
 
   .ps-b,
   .ps-fb {
-    border-radius: 0 0 15px 15px;
+    border-radius: 0 0 9px 9px;
   }
 
   .ps-hint {
-    font-size: 13px;
-    min-height: 16px;
+    font-size: 11.5px;
+    min-height: 14px;
   }
 }
 
@@ -1717,318 +1587,11 @@ body {
   .ps-h,
   .ps-h span,
   .ps-hint,
-  .ps-flap,
-  .ps-srv,
   .ps-pill,
   .ps-bar-btn {
     transition: none !important;
     animation: none !important;
   }
-}
-
-/* AUTH VIEWS & LAYOUT (Preserved for Supabase Login/Signup) */
-.auth-viewport {
-  min-height: 100vh;
-  min-height: 100dvh;
-  width: 100%;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  background: #203F39;
-  padding: 32px 16px;
-  overflow-y: auto;
-  user-select: auto;
-  position: relative;
-}
-
-.auth-viewport::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 4px;
-  background: linear-gradient(90deg, #0F5C62 0%, #FEECD6 50%, #0F5C62 100%);
-  pointer-events: none;
-}
-
-.auth-container {
-  width: 100%;
-  max-width: 440px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 20px;
-  z-index: 2;
-  margin: auto;
-}
-
-.auth-brand-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  background: #FEFEFB;
-  border: 1.5px solid #E2E5DC;
-  padding: 8px 18px;
-  border-radius: 9999px;
-  box-shadow: 0 4px 0 #E2E5DC, 0 8px 16px rgba(8, 75, 70, 0.05);
-}
-
-.auth-brand-dot {
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  background: #FEECD6;
-  border: 2px solid #203F39;
-}
-
-.auth-brand-title {
-  font-family: 'Outfit', sans-serif;
-  font-weight: 900;
-  font-size: 17px;
-  letter-spacing: 0.12em;
-  color: #084B46;
-}
-
-.auth-brand-sub {
-  font-family: 'Space Mono', monospace;
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  color: #0F5C62;
-  border-left: 1px solid #E2E5DC;
-  padding-left: 10px;
-}
-
-.auth-card {
-  width: 100%;
-  background: #FEFEFB;
-  border: 2px solid #E2E5DC;
-  border-radius: 28px;
-  box-shadow: 0 10px 0 #E2E5DC, 0 20px 32px rgba(8, 75, 70, 0.08);
-  padding: 32px 28px;
-}
-
-.auth-card-header {
-  margin-bottom: 24px;
-}
-
-.auth-card-title {
-  font-size: 26px;
-  font-weight: 900;
-  color: #084B46;
-  letter-spacing: -0.01em;
-  line-height: 1.2;
-}
-
-.auth-card-desc {
-  font-size: 14px;
-  color: #748079;
-  margin-top: 6px;
-  line-height: 1.4;
-}
-
-.auth-nav-tabs {
-  display: flex;
-  background: #EAF0E5;
-  border: 1.5px solid #E2E5DC;
-  border-radius: 14px;
-  padding: 4px;
-  margin-bottom: 22px;
-  gap: 4px;
-}
-
-.auth-nav-tab {
-  flex: 1;
-  text-align: center;
-  padding: 8px 12px;
-  font-size: 13px;
-  font-weight: 800;
-  letter-spacing: 0.04em;
-  border-radius: 10px;
-  text-decoration: none;
-  transition: all 0.2s ease;
-  color: #748079;
-  background: transparent;
-  border: none;
-  cursor: pointer;
-}
-
-.auth-nav-tab.active {
-  background: #FEFEFB;
-  color: #203F39;
-  box-shadow: 0 2px 0 #E2E5DC;
-}
-
-.auth-form {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.auth-field {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.auth-label {
-  font-size: 12px;
-  font-weight: 800;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  color: #084B46;
-}
-
-.auth-input-wrapper {
-  position: relative;
-  display: flex;
-  align-items: center;
-}
-
-.auth-input-icon {
-  position: absolute;
-  left: 14px;
-  color: #748079;
-  pointer-events: none;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.auth-input {
-  width: 100%;
-  background: #FAF9F5;
-  border: 1.5px solid #E2E5DC;
-  border-radius: 14px;
-  font-family: 'Outfit', sans-serif;
-  font-size: 15px;
-  color: #084B46;
-  padding: 12px 14px 12px 42px;
-  outline: none;
-  user-select: text !important;
-  -webkit-user-select: text !important;
-  transition: border-color 0.2s, background-color 0.2s;
-}
-
-.auth-input.has-right-icon {
-  padding-right: 42px;
-}
-
-.auth-input:focus {
-  background: #FEFEFB;
-  border-color: #0F5C62;
-}
-
-.auth-input::placeholder {
-  color: #748079;
-}
-
-.auth-eye-btn {
-  position: absolute;
-  right: 12px;
-  background: none;
-  border: none;
-  color: #748079;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 4px;
-  border-radius: 6px;
-}
-
-.auth-row-options {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  font-size: 13px;
-  margin-top: -2px;
-}
-
-.auth-checkbox-label {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  color: #203F39;
-  cursor: pointer;
-  font-weight: 500;
-  user-select: none;
-}
-
-.auth-checkbox {
-  width: 16px;
-  height: 16px;
-  accent-color: #0F5C62;
-  cursor: pointer;
-}
-
-.auth-link {
-  color: #0F5C62;
-  font-weight: 700;
-  text-decoration: none;
-}
-
-.auth-link:hover {
-  color: #203F39;
-  text-decoration: underline;
-}
-
-.auth-submit-btn {
-  width: 100%;
-  margin-top: 6px;
-  background: #0F5C62;
-  color: #FEECD6;
-  border: none;
-  border-radius: 14px;
-  padding: 14px 20px;
-  font-family: 'Outfit', sans-serif;
-  font-size: 16px;
-  font-weight: 900;
-  letter-spacing: 0.04em;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  cursor: pointer;
-  box-shadow: 0 6px 0 #084B46, 0 10px 18px rgba(8, 75, 70, 0.15);
-  transition: transform 0.1s, box-shadow 0.1s;
-}
-
-.auth-submit-btn:hover {
-  background: #085953;
-}
-
-.auth-submit-btn:active {
-  transform: translateY(2px);
-  box-shadow: 0 4px 0 #084B46, 0 6px 12px rgba(8, 75, 70, 0.15);
-}
-
-.auth-notice-box {
-  background: #EAF0E5;
-  border: 1px dashed #E2E5DC;
-  border-radius: 12px;
-  padding: 10px 14px;
-  font-size: 12px;
-  color: #203F39;
-  text-align: center;
-  line-height: 1.4;
-}
-
-.auth-footer-prompt {
-  text-align: center;
-  font-size: 13px;
-  color: #748079;
-  margin-top: 14px;
-}
-
-.auth-footer-copyright {
-  text-align: center;
-  font-family: 'Space Mono', monospace;
-  font-size: 11px;
-  color: #748079;
-  letter-spacing: 0.05em;
 }
 
 /* Cloud Sync Status Badge & Legacy Log Drawer Styles */
@@ -2037,67 +1600,70 @@ body {
   align-items: center;
   justify-content: center;
   gap: 8px;
-  height: 44px;
+  height: 40px;
   box-sizing: border-box;
-  padding: 0 18px;
-  border-radius: 9999px;
-  border: 1.5px solid var(--ps-border);
-  background-color: var(--ps-card);
-  color: var(--ps-ink);
-  font-family: 'Outfit', system-ui, sans-serif;
-  font-size: 14px;
+  padding: 0 14px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-default);
+  background-color: var(--bg-surface-input);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 12px;
   font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
   user-select: none;
   transition: all 0.2s ease;
 }
 
 .ps-sync-pill.ps-sync-synced {
-  border-color: #BBF7D0;
-  background-color: #F0FDF4;
-  color: #166534;
+  border-color: rgba(0, 229, 184, 0.35);
+  background-color: rgba(0, 229, 184, 0.08);
+  color: #FFFFFF;
 }
 
 .ps-sync-pill.ps-sync-syncing {
-  border-color: #FDE68A;
-  background-color: #FFFBEB;
-  color: #92400E;
+  border-color: rgba(244, 162, 97, 0.45);
+  background-color: rgba(244, 162, 97, 0.1);
+  color: #F4A261;
 }
 
 .ps-sync-pill.ps-sync-offline {
-  border-color: #E2E5DC;
-  background-color: #FAF9F5;
-  color: #748079;
+  border-color: var(--border-default);
+  background-color: var(--bg-surface-input);
+  color: var(--text-muted);
 }
 
 .ps-sync-pill.ps-sync-error {
-  border-color: #FECACA;
-  background-color: #FEF2F2;
-  color: #991B1B;
+  border-color: rgba(244, 112, 103, 0.5);
+  background-color: rgba(244, 112, 103, 0.12);
+  color: #F47067;
 }
 
 .ps-legacy-log-section {
-  padding: 10px 16px 0;
-  background-color: #FAF9F5;
-  border-bottom: 1px dashed var(--ps-border);
-  margin-bottom: 8px;
+  padding: 12px 14px 4px;
+  background-color: var(--bg-surface-input);
+  border: 1px dashed var(--border-default);
+  border-radius: var(--radius-sm);
+  margin-bottom: 12px;
 }
 
 .ps-legacy-log-badge {
   font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--ps-muted);
-  margin-bottom: 6px;
+  letter-spacing: 0.1em;
+  color: var(--text-muted);
+  margin-bottom: 8px;
 }
 
 .ps-log-item-legacy {
-  opacity: 0.75;
+  opacity: 0.78;
   font-style: italic;
 }
 
 .ps-legacy-divider {
   height: 1px;
-  background-color: var(--ps-border);
+  background-color: var(--border-divider);
   margin-top: 8px;
 }

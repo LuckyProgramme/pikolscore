@@ -1,6 +1,8 @@
 'use client';
 
 import { useState, useEffect, useId, useMemo, useRef, useCallback } from 'react';
+import { PikolScoreLogo } from '@/components/ui/PikolScoreLogo';
+import { AmbientCourtMotif } from '@/components/ui/AmbientCourtMotif';
 import {
   splitPlayerName,
   getPlayerInitials,
@@ -131,7 +133,7 @@ export function PosterStage({ children, className = '' }) {
 
   return (
     <div
-      className={`fixed inset-0 bg-poster-stage overflow-hidden flex items-center justify-center select-none font-outfit ${className}`}
+      className={`fixed inset-0 bg-poster-stage overflow-hidden flex items-center justify-center select-none font-sans ${className}`}
     >
       <div
         className="relative w-[1920px] h-[1080px] bg-poster-stage overflow-hidden shrink-0"
@@ -147,8 +149,8 @@ export function PosterStage({ children, className = '' }) {
 }
 
 /**
- * Split diagonal court backdrop with Team A teal gradient, Team B sage gradient,
- * radial glows, and cream center seam at 90% opacity.
+ * Split diagonal court backdrop with DinkVision Team A elevated navy + cyan glow,
+ * Team B deep navy + halftone lime glow, and cyan center seam.
  */
 export function PosterBackground() {
   return (
@@ -172,14 +174,14 @@ export function PosterBackground() {
           d="M1034 0H1920V1080H886L1034 0Z"
           fill="url(#poster-team-b-grad)"
         />
-        {/* Team A radial glow: r=560 at (470, 640) #3AA7AC 36% -> 0 */}
+        {/* Team A radial glow: r=560 at (470, 640) #00E5B8 */}
         <circle
           cx="470"
           cy="640"
           r="560"
           fill="url(#poster-team-a-glow)"
         />
-        {/* Team B radial glow: r=560 at (1450, 640) #8A9B82 34% -> 0 */}
+        {/* Team B radial glow: r=560 at (1450, 640) #C5E832 */}
         <circle
           cx="1450"
           cy="640"
@@ -189,8 +191,8 @@ export function PosterBackground() {
         {/* Seam parallelogram: (1034,0) (1042,0) (894,1080) (886,1080) */}
         <path
           d="M1034 0H1042L894 1080H886L1034 0Z"
-          fill="#FEECD6"
-          fillOpacity="0.9"
+          fill="#00E5B8"
+          fillOpacity="0.92"
         />
       </g>
       <defs>
@@ -202,8 +204,8 @@ export function PosterBackground() {
           y2="1080"
           gradientUnits="userSpaceOnUse"
         >
-          <stop stopColor="#0F5C62" />
-          <stop offset="1" stopColor="#073A38" />
+          <stop stopColor="#0B2239" />
+          <stop offset="1" stopColor="#041527" />
         </linearGradient>
         <linearGradient
           id="poster-team-b-grad"
@@ -213,8 +215,8 @@ export function PosterBackground() {
           y2="1080"
           gradientUnits="userSpaceOnUse"
         >
-          <stop stopColor="#2A4F47" />
-          <stop offset="1" stopColor="#14302B" />
+          <stop stopColor="#07192B" />
+          <stop offset="1" stopColor="#021024" />
         </linearGradient>
         <radialGradient
           id="poster-team-a-glow"
@@ -224,8 +226,8 @@ export function PosterBackground() {
           gradientUnits="userSpaceOnUse"
           gradientTransform="translate(470 640) scale(560)"
         >
-          <stop stopColor="#3AA7AC" stopOpacity="0.36" />
-          <stop offset="1" stopColor="#3AA7AC" stopOpacity="0" />
+          <stop stopColor="#00E5B8" stopOpacity="0.24" />
+          <stop offset="1" stopColor="#00E5B8" stopOpacity="0" />
         </radialGradient>
         <radialGradient
           id="poster-team-b-glow"
@@ -235,8 +237,8 @@ export function PosterBackground() {
           gradientUnits="userSpaceOnUse"
           gradientTransform="translate(1450 640) scale(560)"
         >
-          <stop stopColor="#8A9B82" stopOpacity="0.34" />
-          <stop offset="1" stopColor="#8A9B82" stopOpacity="0" />
+          <stop stopColor="#C5E832" stopOpacity="0.18" />
+          <stop offset="1" stopColor="#C5E832" stopOpacity="0" />
         </radialGradient>
         <clipPath id="poster-stage-clip">
           <rect width="1920" height="1080" fill="white" />
@@ -270,9 +272,9 @@ function PlaceholderSilhouette() {
           x2="0"
           y2="562"
         >
-          <stop offset="0" stopColor="#EAF0E5" stopOpacity=".34" />
-          <stop offset=".72" stopColor="#EAF0E5" stopOpacity=".22" />
-          <stop offset="1" stopColor="#EAF0E5" stopOpacity="0" />
+          <stop offset="0" stopColor="#FFFFFF" stopOpacity=".18" />
+          <stop offset=".72" stopColor="#FFFFFF" stopOpacity=".10" />
+          <stop offset="1" stopColor="#FFFFFF" stopOpacity="0" />
         </linearGradient>
       </defs>
       <path
@@ -538,14 +540,14 @@ export function PlayerSlot({
             <div className="absolute inset-x-0 top-[36%] flex items-center justify-center">
               <div
                 key={`initials-${playerName}`}
-                className={`rounded-full flex items-center justify-center font-outfit font-black tracking-tight shadow-[0_12px_32px_rgba(0,0,0,0.32)] animate-poster-enter motion-reduce:animate-none ${
+                className={`rounded-full flex items-center justify-center font-display font-extrabold italic tracking-tight shadow-[0_12px_32px_rgba(0,0,0,0.45)] animate-poster-enter motion-reduce:animate-none ${
                   isFront
-                    ? 'w-[148px] h-[148px] text-[56px]'
-                    : 'w-[124px] h-[124px] text-[46px]'
+                    ? 'w-[148px] h-[148px] text-[62px]'
+                    : 'w-[124px] h-[124px] text-[52px]'
                 } ${
                   isTeamA
-                    ? 'bg-cream text-dark-teal border-[3px] border-teal/40'
-                    : 'bg-sage text-poster-ink border-[3px] border-cream/40'
+                    ? 'bg-[#021024] text-[#00E5B8] border-[3px] border-[#00E5B8]'
+                    : 'bg-[#021024] text-[#C5E832] border-[3px] border-[#C5E832]'
                 }`}
               >
                 {getPlayerInitials(playerName)}
@@ -577,10 +579,10 @@ export function NamePill({ team = 'A', position = 'front', player = null }) {
   if (!hasPlayer) {
     return (
       <div
-        className={`absolute ${posClass} flex flex-col items-center justify-center rounded-[64px] pt-[16px] pb-[18px] px-[44px] bg-poster-stage/65 border-2 border-cream/25 shadow-[0_10px_28px_rgba(0,0,0,0.22)] whitespace-nowrap`}
+        className={`absolute ${posClass} flex flex-col items-center justify-center rounded-[16px] pt-[16px] pb-[18px] px-[44px] bg-[#021024]/85 border border-[#24425E] shadow-[0_12px_32px_rgba(0,0,0,0.36)] whitespace-nowrap`}
         data-pill={slotKey}
       >
-        <p className="font-outfit font-medium text-[26px] leading-[32px] text-pale-sage/75">
+        <p className="font-sans font-semibold text-[24px] leading-[32px] text-[#B0C4D8]">
           Waiting for player
         </p>
       </div>
@@ -592,35 +594,33 @@ export function NamePill({ team = 'A', position = 'front', player = null }) {
 
   // Step down surname font size so the pill never exceeds ~520px
   const surnameLen = lastName.length;
-  let surnameSizeClass = 'text-[46px] leading-[52px]';
+  let surnameSizeClass = 'text-[52px] leading-[56px]';
   if (surnameLen > 22) {
-    surnameSizeClass = 'text-[22px] leading-[30px]';
+    surnameSizeClass = 'text-[26px] leading-[32px]';
   } else if (surnameLen > 16) {
-    surnameSizeClass = 'text-[28px] leading-[36px]';
+    surnameSizeClass = 'text-[34px] leading-[40px]';
   } else if (surnameLen > 11) {
-    surnameSizeClass = 'text-[36px] leading-[44px]';
+    surnameSizeClass = 'text-[42px] leading-[48px]';
   }
 
   return (
     <div
-      className={`absolute ${posClass} flex flex-col items-center justify-center rounded-[64px] pt-[14px] pb-[18px] px-[56px] min-h-[116px] max-w-[520px] shadow-[0_10px_28px_rgba(0,0,0,0.28)] ${
-        isTeamA ? 'bg-cream' : 'bg-sage text-poster-ink'
+      className={`absolute ${posClass} flex flex-col items-center justify-center rounded-[16px] pt-[14px] pb-[18px] px-[48px] min-h-[116px] max-w-[520px] border border-[#24425E] shadow-[0_14px_34px_rgba(0,0,0,0.45)] ${
+        isTeamA ? 'bg-[#0B2239] dv-top-accent' : 'bg-[#07192B] dv-top-accent-lime'
       }`}
       data-pill={slotKey}
     >
       {firstName && (
         <p
-          className={`font-outfit font-medium text-[26px] leading-[32px] max-w-full truncate ${
-            isTeamA ? 'text-teal' : 'text-poster-ink'
+          className={`font-sans font-bold text-[20px] leading-[26px] uppercase tracking-[0.12em] max-w-full truncate ${
+            isTeamA ? 'text-[#00E5B8]' : 'text-[#C5E832]'
           }`}
         >
           {firstName}
         </p>
       )}
       <p
-        className={`font-outfit font-bold ${surnameSizeClass} tracking-[0.02em] uppercase max-w-full truncate ${
-          isTeamA ? 'text-dark-teal' : 'text-poster-ink'
-        }`}
+        className={`font-display font-extrabold italic ${surnameSizeClass} tracking-[0.02em] uppercase text-[#FFFFFF] max-w-full truncate`}
       >
         {lastName}
       </p>
@@ -629,8 +629,8 @@ export function NamePill({ team = 'A', position = 'front', player = null }) {
 }
 
 /**
- * VS badge centered at (960, 600): 224px ring with 3px #FEECD6 at 50%, 176px #FEECD6 disc,
- * and "VS" in Outfit Black 76/80 #084B46.
+ * VS badge centered at (960, 600): 224px ring with 3px #00E5B8 at 60%, 176px #00E5B8 disc,
+ * and "VS" in Barlow Condensed ExtraBold Italic 92/92 #031B28.
  */
 export function VsBadge() {
   return (
@@ -638,9 +638,9 @@ export function VsBadge() {
       className="absolute left-[848px] top-[488px] w-[224px] h-[224px] z-40 flex items-center justify-center pointer-events-none"
       aria-hidden="true"
     >
-      <div className="absolute inset-0 rounded-full border-[3px] border-cream/50" />
-      <div className="w-[176px] h-[176px] rounded-full bg-cream flex items-center justify-center">
-        <span className="font-outfit font-black text-[76px] leading-[80px] text-dark-teal">
+      <div className="absolute inset-0 rounded-full border-[3px] border-[#00E5B8]/60 bg-[#021024]/65 backdrop-blur-sm" />
+      <div className="relative w-[176px] h-[176px] rounded-full bg-[#00E5B8] shadow-[0_0_40px_rgba(0,229,184,0.35)] flex items-center justify-center">
+        <span className="font-display font-extrabold italic text-[92px] leading-[92px] text-[#031B28] pr-1">
           VS
         </span>
       </div>
@@ -654,12 +654,12 @@ export function VsBadge() {
 export function StatusChip({ label = 'Waiting for the umpire to start' }) {
   return (
     <div
-      className="absolute left-1/2 -translate-x-1/2 top-[978px] z-40 flex items-center gap-[16px] py-[18px] pl-[34px] pr-[40px] rounded-full bg-poster-stage/80 border-2 border-cream/35 whitespace-nowrap"
+      className="absolute left-1/2 -translate-x-1/2 top-[978px] z-40 flex items-center gap-[16px] py-[18px] pl-[34px] pr-[40px] rounded-full bg-[#021024]/90 border-2 border-[#24425E] shadow-[0_10px_30px_rgba(0,0,0,0.45)] whitespace-nowrap"
       role="status"
       aria-live="polite"
     >
-      <span className="w-[16px] h-[16px] rounded-full bg-cream shrink-0" />
-      <p className="font-outfit font-medium text-[30px] leading-[38px] text-off-white">
+      <span className="w-[16px] h-[16px] rounded-full bg-[#00E5B8] shrink-0" />
+      <p className="font-sans font-semibold text-[28px] leading-[36px] text-[#FFFFFF]">
         {label}
       </p>
     </div>
@@ -954,20 +954,28 @@ export default function StandbyPoster({
       {/* 1. Split Diagonal Background & Glows */}
       <PosterBackground />
 
+      {/* Bottom-right subtle DinkVision halftone court motif */}
+      <AmbientCourtMotif
+        variant="full"
+        opacity={0.35}
+        className="!w-[560px] z-[5]"
+      />
+
       {/* 2. Top-left Wordmark */}
-      <p className="absolute left-[64px] top-[46px] z-10 font-outfit font-semibold text-[32px] leading-[40px] text-off-white/[0.92] whitespace-nowrap">
-        PikolScore
-      </p>
+      <PikolScoreLogo
+        size="lg"
+        className="absolute left-[64px] top-[46px] z-10 scale-125 origin-top-left"
+      />
 
       {/* 3. Top-center Match-Type Chip */}
-      <div className="absolute left-1/2 -translate-x-1/2 top-[40px] z-10 px-[36px] py-[12px] rounded-full bg-poster-stage/60 border-2 border-cream/50 flex items-center justify-center">
-        <p className="font-outfit font-semibold text-[30px] leading-[38px] tracking-[0.03em] text-cream whitespace-nowrap">
+      <div className="absolute left-1/2 -translate-x-1/2 top-[40px] z-10 px-[36px] py-[10px] rounded-full bg-[#021024]/90 border-2 border-[#00E5B8] flex items-center justify-center shadow-[0_6px_20px_rgba(0,0,0,0.35)]">
+        <p className="font-sans font-extrabold uppercase text-[24px] leading-[32px] tracking-[0.14em] text-[#00E5B8] whitespace-nowrap">
           {chipLabel}
         </p>
       </div>
 
       {/* 4. Giant Court Headline (sits behind players so heads overlap the bottom of the letters) */}
-      <h1 className="absolute left-1/2 -translate-x-1/2 top-[78px] z-10 font-outfit font-black text-[340px] leading-[340px] tracking-[-0.02em] text-off-white whitespace-nowrap m-0 pointer-events-none">
+      <h1 className="absolute left-1/2 -translate-x-1/2 top-[88px] z-10 font-display font-extrabold italic uppercase text-[320px] leading-[320px] tracking-[-0.01em] text-[#FFFFFF]/[0.92] whitespace-nowrap m-0 pointer-events-none">
         COURT {courtNumber || 1}
       </h1>
 

@@ -40,10 +40,9 @@ export const CONTENT = {
     title: (winnerName) => `🏆 ${winnerName} WINS!`,
     finalScoreLabel: (scores) =>
       `Final Score: ${scores?.[0]} - ${scores?.[1]} (Official 11-point win by 2)`,
-    rematchButton: 'Rematch (Same Players)',
-    newMatchButton: 'Start New Match',
+    confirmButton: 'Confirm',
+    confirmingButton: 'Confirming...',
     undoButton: 'Undo Winning Point',
-    goToMatchesButton: 'Match Hub / New Match',
     reviewButton: 'Review Scoreboard',
   },
 

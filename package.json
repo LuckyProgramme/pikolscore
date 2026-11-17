@@ -7,7 +7,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "test": "node test-rules.js && node test-sync.js && node test-voice.js"
+    "test": "node test-rules.js && node test-sync.js && node test-voice.js && node test-projected-screen.js"
   },
   "dependencies": {
     "@imgly/background-removal": "^1.7.0",
