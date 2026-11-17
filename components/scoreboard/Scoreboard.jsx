@@ -420,25 +420,32 @@ export function Scoreboard() {
           })
         : Promise.resolve();
 
-      const closeTasks = [confirmTask];
+      const preCloseTasks = [confirmTask];
 
       if (
         sync?.isEnabled &&
         closingSessionId &&
         (state?.gameOver || timer.status === 'expired' || timer.remainingSeconds === 0)
       ) {
-        closeTasks.push(
+        preCloseTasks.push(
           notifyTvCourtClosed({
             courtNumber: courtNum,
             sessionId: closingSessionId,
             reason: 'completed',
             pairedTvIds,
-          }),
-          sync.closeSession('completed')
+          })
         );
       }
 
-      await Promise.allSettled(closeTasks);
+      await Promise.allSettled(preCloseTasks);
+
+      if (
+        sync?.isEnabled &&
+        closingSessionId &&
+        (state?.gameOver || timer.status === 'expired' || timer.remainingSeconds === 0)
+      ) {
+        await sync.closeSession('completed');
+      }
       setGameWonModalOpen(false);
       router.push('/matches');
     } finally {

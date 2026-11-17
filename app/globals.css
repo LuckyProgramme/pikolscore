@@ -43,8 +43,8 @@
   /* ==========================================================================
      2. TYPOGRAPHY TOKENS
      ========================================================================== */
-  --font-display: var(--font-display, 'Barlow Condensed'), 'Teko', sans-serif;
-  --font-sans: var(--font-sans, 'Plus Jakarta Sans'), 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-display: var(--font-barlow-condensed, 'Barlow Condensed'), 'Teko', sans-serif;
+  --font-sans: var(--font-plus-jakarta, 'Plus Jakarta Sans'), 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
 
   /* ==========================================================================
      3. SPACING & RADII TOKENS (8pt Grid)

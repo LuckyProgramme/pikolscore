@@ -3,7 +3,6 @@
 import {
   useState,
   useEffect,
-  useLayoutEffect,
   useRef,
   useMemo,
   useCallback,
@@ -15,26 +14,24 @@ import {
   QrCode,
   Volume2,
   VolumeX,
-  Timer,
-  Shield,
-  Users,
   RefreshCw,
   Unlink,
   Loader2,
-  Trophy,
-  ArrowLeftRight,
-  AlertTriangle,
 } from 'lucide-react';
 import QRCode from 'qrcode';
 import { supabase } from '@/config/supabase';
 import { PikolScoreLogo } from '@/components/ui/PikolScoreLogo';
 import { AmbientCourtMotif } from '@/components/ui/AmbientCourtMotif';
-import FlipDigit from '@/components/scoreboard/FlipDigit';
+import ProjectedScoreboard from '@/components/screen/ProjectedScoreboard';
 import StandbyPoster, {
   STANDBY_POSTER_FIXTURES,
 } from '@/components/tv/StandbyPoster';
 import { buildPosterPropsFromSession } from '@/lib/standby-poster';
-import { formatMmSs } from '@/hooks/useMatchTimer';
+import {
+  buildProjectedViewProps,
+  resolveTvSessionCloseAction,
+  PROJECTED_FIXTURES,
+} from '@/lib/projected-screen';
 import { getSynth } from '@/lib/audio';
 import {
   TV_ID_STORAGE_KEY,
@@ -45,9 +42,6 @@ import {
 } from '@/lib/tv-pairing';
 
 const TV_MUTED_STORAGE_KEY = 'pikol_tv_muted';
-
-const useIsoLayoutEffect =
-  typeof window !== 'undefined' ? useLayoutEffect : useEffect;
 
 function getCourtNumber(row) {
   return Number(row?.court_number || row?.player_names?.courtNumber) || null;
@@ -74,24 +68,22 @@ export default function ScreenView() {
   const [showPoster, setShowPoster] = useState(false);
   const [isPosterFading, setIsPosterFading] = useState(false);
   const [posterControlsVisible, setPosterControlsVisible] = useState(false);
-  const [sideOutNotice, setSideOutNotice] = useState('');
   const [abandonCountdown, setAbandonCountdown] = useState(null); // 5..0 when match is abandoned
   const [, setTick] = useState(0);
 
-  // Refs for tracking score/serve transitions & FLIP animation on side-out
+  // Refs for tracking score/serve transitions & timers
   const prevMatchSnapRef = useRef(null);
   const prevMatchStartedRef = useRef(null);
   const controlsTimerRef = useRef(null);
-  const servingCardRef = useRef(null);
-  const receivingCardRef = useRef(null);
-  const prevServingTeamRef = useRef(null);
-  const beforeRectsRef = useRef(null);
+  const lastStartedSessionRef = useRef(null);
+  const tvIdRef = useRef('');
+  tvIdRef.current = tvId;
   const pairedCourtRef = useRef(null);
   pairedCourtRef.current = pairedCourt;
   const courtsDataRef = useRef({});
   courtsDataRef.current = courtsData;
   const abandonTriggeredRef = useRef(false);
-  const completedRedirectRef = useRef(false);
+  const handledClosedSessionIdsRef = useRef(new Set());
 
   // 1. Initialize TV device ID, saved paired court, and audio mute preference
   useEffect(() => {
@@ -158,8 +150,9 @@ export default function ScreenView() {
     }
     prevMatchSnapRef.current = null;
     prevMatchStartedRef.current = null;
+    lastStartedSessionRef.current = null;
     abandonTriggeredRef.current = false;
-    completedRedirectRef.current = false;
+    handledClosedSessionIdsRef.current.clear();
     const freshId = generateTvId();
     setTvId(freshId);
     if (typeof window !== 'undefined') {
@@ -170,9 +163,9 @@ export default function ScreenView() {
     router.replace('/umpire');
   }, [router]);
 
-  // Trigger 5-second "Abandon the match" prompt before returning to /role
+  // Trigger 5-second "Abandon the match" prompt before returning to /umpire
   const triggerAbandonPrompt = useCallback(() => {
-    if (abandonTriggeredRef.current || completedRedirectRef.current) return;
+    if (abandonTriggeredRef.current) return;
     abandonTriggeredRef.current = true;
     const synth = getSynth();
     if (synth && !synth.muted) {
@@ -180,13 +173,6 @@ export default function ScreenView() {
     }
     setAbandonCountdown(5);
   }, []);
-
-  // Trigger immediate return to /role when match is completed & closed
-  const triggerCompletedReturnToRole = useCallback(() => {
-    if (completedRedirectRef.current || abandonTriggeredRef.current) return;
-    completedRedirectRef.current = true;
-    handleUnpairTv();
-  }, [handleUnpairTv]);
 
   // 5-second countdown effect when match is abandoned
   useEffect(() => {
@@ -232,6 +218,12 @@ export default function ScreenView() {
           let matchedCourtFromDb = null;
 
           data.forEach((row) => {
+            if (
+              handledClosedSessionIdsRef.current.has(row.id) ||
+              resolveTvSessionCloseAction(row) !== null
+            ) {
+              return;
+            }
             const cNum = getCourtNumber(row);
             if (cNum >= 1 && cNum <= 4) {
               map[cNum] = row;
@@ -265,6 +257,40 @@ export default function ScreenView() {
     fetchCourts(tvId);
   }, [tvId, fetchCourts]);
 
+  // Keep TV paired to the same court and return to Standby Lobby after explicit match confirmation
+  const returnToCourtStandby = useCallback(
+    (closedSessionId = null) => {
+      if (abandonTriggeredRef.current) return;
+      const cNum = pairedCourtRef.current;
+      const targetId =
+        closedSessionId || (cNum ? courtsDataRef.current[cNum]?.id : null);
+      if (targetId) {
+        if (handledClosedSessionIdsRef.current.has(targetId)) return;
+        handledClosedSessionIdsRef.current.add(targetId);
+      }
+
+      lastStartedSessionRef.current = null;
+      prevMatchSnapRef.current = null;
+      setAbandonCountdown(null);
+
+      if (cNum) {
+        setCourtsData((prev) => {
+          const current = prev[cNum];
+          if (!current) return prev;
+          if (targetId && current.id !== targetId) return prev;
+          const next = { ...prev };
+          delete next[cNum];
+          return next;
+        });
+      }
+
+      if (tvIdRef.current) {
+        fetchCourts(tvIdRef.current);
+      }
+    },
+    [fetchCourts]
+  );
+
   // 3. Subscribe to Realtime match_sessions changes + tv_pairing:<tvId> broadcast channel
   useEffect(() => {
     if (!tvId) return;
@@ -277,6 +303,9 @@ export default function ScreenView() {
         (payload) => {
           const { eventType, new: newRow, old: oldRow } = payload;
           const rowId = newRow?.id || oldRow?.id;
+          if (rowId && handledClosedSessionIdsRef.current.has(rowId)) {
+            return;
+          }
           let cNum = getCourtNumber(newRow) || getCourtNumber(oldRow);
           if (!cNum && rowId) {
             const matchedEntry = Object.entries(courtsDataRef.current).find(
@@ -287,35 +316,16 @@ export default function ScreenView() {
           if (!cNum || cNum < 1 || cNum > 4) return;
 
           const currentPaired = pairedCourtRef.current;
-          const closedReason = newRow?.player_names?.tvClosedReason;
+          const closeAction = resolveTvSessionCloseAction(newRow);
 
-          // If this update is for our currently paired court, check if the match was abandoned or ended
+          // Only transition on explicit abandonment or explicit umpire confirmation
           if (currentPaired && cNum === currentPaired) {
-            if (closedReason === 'abandoned' || newRow?.status === 'abandoned') {
+            if (closeAction === 'abandoned') {
               triggerAbandonPrompt();
               return;
             }
-            if (closedReason === 'completed') {
-              triggerCompletedReturnToRole();
-              return;
-            }
-            if (newRow?.status === 'completed') {
-              // Wait briefly in case this completion is part of a Rematch creating a new session on the same court
-              setTimeout(async () => {
-                if (abandonTriggeredRef.current || completedRedirectRef.current) return;
-                const { data: activeOnCourt } = await supabase
-                  .from('match_sessions')
-                  .select('id, court_number, player_names, status')
-                  .eq('status', 'in_progress');
-                const replacement = (activeOnCourt || []).find(
-                  (r) => getCourtNumber(r) === cNum && r.id !== rowId
-                );
-                if (replacement) {
-                  setCourtsData((prev) => ({ ...prev, [cNum]: replacement }));
-                } else {
-                  triggerCompletedReturnToRole();
-                }
-              }, 700);
+            if (closeAction === 'completed') {
+              returnToCourtStandby(rowId);
               return;
             }
           }
@@ -323,7 +333,7 @@ export default function ScreenView() {
           if (
             eventType !== 'DELETE' &&
             newRow?.status === 'in_progress' &&
-            !closedReason &&
+            !closeAction &&
             Array.isArray(newRow?.player_names?.pairedTvIds) &&
             newRow.player_names.pairedTvIds.includes(tvId)
           ) {
@@ -334,7 +344,8 @@ export default function ScreenView() {
             const next = { ...prev };
             if (
               eventType === 'DELETE' ||
-              (newRow && newRow.status !== 'in_progress')
+              closeAction !== null ||
+              newRow?.status === 'abandoned'
             ) {
               if (
                 next[cNum]?.id === rowId &&
@@ -342,7 +353,11 @@ export default function ScreenView() {
               ) {
                 delete next[cNum];
               }
-            } else if (newRow && newRow.status === 'in_progress') {
+            } else if (
+              newRow &&
+              (newRow.status === 'in_progress' ||
+                (newRow.status === 'completed' && next[cNum]?.id === rowId))
+            ) {
               next[cNum] = newRow;
             }
             return next;
@@ -357,7 +372,8 @@ export default function ScreenView() {
         const targetCourt = Number(msg?.payload?.courtNumber);
         if (targetCourt >= 1 && targetCourt <= 4) {
           abandonTriggeredRef.current = false;
-          completedRedirectRef.current = false;
+          handledClosedSessionIdsRef.current.clear();
+          lastStartedSessionRef.current = null;
           setAbandonCountdown(null);
           activateCourtPairing(targetCourt);
           fetchCourts(tvId);
@@ -365,10 +381,11 @@ export default function ScreenView() {
       })
       .on('broadcast', { event: 'court_closed' }, (msg) => {
         const reason = msg?.payload?.reason;
+        const closedId = msg?.payload?.sessionId || null;
         if (reason === 'abandoned') {
           triggerAbandonPrompt();
         } else if (reason === 'completed') {
-          triggerCompletedReturnToRole();
+          returnToCourtStandby(closedId);
         }
       })
       .subscribe();
@@ -382,7 +399,7 @@ export default function ScreenView() {
     activateCourtPairing,
     fetchCourts,
     triggerAbandonPrompt,
-    triggerCompletedReturnToRole,
+    returnToCourtStandby,
   ]);
 
   // 3b. Subscribe to court-level broadcast channel `tv_court:<pairedCourt>`
@@ -393,10 +410,11 @@ export default function ScreenView() {
       .channel(`tv_court:${pairedCourt}`)
       .on('broadcast', { event: 'court_closed' }, (msg) => {
         const reason = msg?.payload?.reason;
+        const closedId = msg?.payload?.sessionId || null;
         if (reason === 'abandoned') {
           triggerAbandonPrompt();
         } else if (reason === 'completed') {
-          triggerCompletedReturnToRole();
+          returnToCourtStandby(closedId);
         }
       })
       .on('broadcast', { event: 'profile_updated' }, () => {
@@ -407,7 +425,7 @@ export default function ScreenView() {
     return () => {
       supabase.removeChannel(courtChannel);
     };
-  }, [pairedCourt, triggerAbandonPrompt, triggerCompletedReturnToRole]);
+  }, [pairedCourt, triggerAbandonPrompt, returnToCourtStandby]);
 
   // 4. 1-second timer tick for live match countdown
   useEffect(() => {
@@ -458,10 +476,11 @@ export default function ScreenView() {
 
   // Current paired court session (keep last active session frozen in background during 5s abandon countdown)
   const rawCourtSession = pairedCourt ? courtsData[pairedCourt] || null : null;
-  const lastStartedSessionRef = useRef(null);
   if (
     rawCourtSession &&
-    rawCourtSession.status === 'in_progress' &&
+    (rawCourtSession.status === 'in_progress' ||
+      (rawCourtSession.status === 'completed' &&
+        resolveTvSessionCloseAction(rawCourtSession) === null)) &&
     rawCourtSession.player_names?.lobbyLocked === true
   ) {
     lastStartedSessionRef.current = rawCourtSession;
@@ -471,7 +490,10 @@ export default function ScreenView() {
     (abandonCountdown !== null ? lastStartedSessionRef.current : null);
   const isMatchStarted = Boolean(
     activeSession &&
-      (activeSession.status === 'in_progress' || abandonCountdown !== null) &&
+      (activeSession.status === 'in_progress' ||
+        (activeSession.status === 'completed' &&
+          resolveTvSessionCloseAction(activeSession) === null) ||
+        abandonCountdown !== null) &&
       activeSession.player_names?.lobbyLocked === true
   );
 
@@ -645,7 +667,7 @@ export default function ScreenView() {
       if (
         cancelled ||
         abandonTriggeredRef.current ||
-        completedRedirectRef.current
+        handledClosedSessionIdsRef.current.has(watchedId)
       ) {
         return;
       }
@@ -658,16 +680,6 @@ export default function ScreenView() {
 
         if (cancelled || error) return;
 
-        const closedReason = data?.player_names?.tvClosedReason;
-        if (closedReason === 'abandoned' || data?.status === 'abandoned') {
-          triggerAbandonPrompt();
-          return;
-        }
-        if (closedReason === 'completed') {
-          triggerCompletedReturnToRole();
-          return;
-        }
-
         // Because RLS for anon only allows status IN ('in_progress', 'completed'),
         // data === null means the session status transitioned to 'abandoned'!
         if (!data) {
@@ -675,19 +687,13 @@ export default function ScreenView() {
           return;
         }
 
-        if (data.status === 'completed') {
-          const { data: activeOnCourt } = await supabase
-            .from('match_sessions')
-            .select('id, court_number, player_names, status')
-            .eq('status', 'in_progress');
-          const replacement = (activeOnCourt || []).find(
-            (r) => getCourtNumber(r) === pairedCourt && r.id !== watchedId
-          );
-          if (replacement) {
-            setCourtsData((prev) => ({ ...prev, [pairedCourt]: replacement }));
-          } else {
-            triggerCompletedReturnToRole();
-          }
+        const closeAction = resolveTvSessionCloseAction(data);
+        if (closeAction === 'abandoned') {
+          triggerAbandonPrompt();
+          return;
+        }
+        if (closeAction === 'completed') {
+          returnToCourtStandby(watchedId);
         }
       } catch (err) {
         console.warn('[ScreenView] Session status check warning:', err);
@@ -703,90 +709,14 @@ export default function ScreenView() {
     rawCourtSession?.id,
     rawCourtSession?.player_names?.lobbyLocked,
     triggerAbandonPrompt,
-    triggerCompletedReturnToRole,
+    returnToCourtStandby,
   ]);
 
   // Compute live match metrics when match is started
   const servingTeamIdx = activeSession?.serving_team ?? 0;
-  const receivingTeamIdx = 1 - servingTeamIdx;
   const serverNum = activeSession?.server_number ?? 2;
   const scoreTeam0 = activeSession?.score_team0 ?? 0;
   const scoreTeam1 = activeSession?.score_team1 ?? 0;
-
-  // Capture bounding rects right before servingTeamIdx changes so we can FLIP-animate the two cards swapping!
-  if (
-    isMatchStarted &&
-    prevServingTeamRef.current !== null &&
-    prevServingTeamRef.current !== servingTeamIdx &&
-    servingCardRef.current &&
-    receivingCardRef.current
-  ) {
-    beforeRectsRef.current = {
-      serving: servingCardRef.current.getBoundingClientRect(),
-      receiving: receivingCardRef.current.getBoundingClientRect(),
-    };
-  }
-
-  useIsoLayoutEffect(() => {
-    if (!isMatchStarted) {
-      prevServingTeamRef.current = null;
-      beforeRectsRef.current = null;
-      return;
-    }
-
-    if (
-      prevServingTeamRef.current !== null &&
-      prevServingTeamRef.current !== servingTeamIdx
-    ) {
-      const before = beforeRectsRef.current;
-      beforeRectsRef.current = null;
-
-      const tNames = activeSession?.team_names || ['Team A', 'Team B'];
-      const newServingName =
-        tNames[servingTeamIdx] || (servingTeamIdx === 0 ? 'Team A' : 'Team B');
-      setSideOutNotice(`SIDE OUT · ${newServingName} Now Serving`);
-      const clearTimer = setTimeout(() => setSideOutNotice(''), 3200);
-
-      // Animate swap between Left (Serving) and Center (Receiving) cards
-      if (
-        before &&
-        servingCardRef.current &&
-        receivingCardRef.current &&
-        typeof servingCardRef.current.animate === 'function'
-      ) {
-        const afterServing = servingCardRef.current.getBoundingClientRect();
-        const afterReceiving = receivingCardRef.current.getBoundingClientRect();
-        const dxS = before.receiving.left - afterServing.left;
-        const dyS = before.receiving.top - afterServing.top;
-        const dxR = before.serving.left - afterReceiving.left;
-        const dyR = before.serving.top - afterReceiving.top;
-
-        if (dxS !== 0 || dyS !== 0) {
-          servingCardRef.current.animate(
-            [
-              { transform: `translate(${dxS}px, ${dyS}px)` },
-              { transform: 'translate(0, 0)' },
-            ],
-            { duration: 420, easing: 'cubic-bezier(0.22, 1, 0.36, 1)' }
-          );
-        }
-        if (dxR !== 0 || dyR !== 0) {
-          receivingCardRef.current.animate(
-            [
-              { transform: `translate(${dxR}px, ${dyR}px)` },
-              { transform: 'translate(0, 0)' },
-            ],
-            { duration: 420, easing: 'cubic-bezier(0.22, 1, 0.36, 1)' }
-          );
-        }
-      }
-
-      prevServingTeamRef.current = servingTeamIdx;
-      return () => clearTimeout(clearTimer);
-    }
-
-    prevServingTeamRef.current = servingTeamIdx;
-  }, [isMatchStarted, servingTeamIdx, activeSession?.team_names]);
 
   // 6. Sound effects on score, side-out, second serve, timer expiry, and match won
   useEffect(() => {
@@ -852,9 +782,24 @@ export default function ScreenView() {
   ]);
 
   // ===========================================================================
-  // DEV / PHASE 1 FIXTURE MODE (?fixture=1 | figma | singles | empty | initials)
+  // DEV / FIXTURE MODE
+  // - Live projected screen fixtures: ?fixture=live | live-singles | live-paused | live-abandon | live-long
+  // - Standby poster fixtures: ?fixture=1 | figma | singles | empty | initials | motion
   // ===========================================================================
   if (fixtureMode) {
+    if (PROJECTED_FIXTURES[fixtureMode]) {
+      const liveFixture = PROJECTED_FIXTURES[fixtureMode];
+      return (
+        <ProjectedScoreboard
+          {...liveFixture}
+          muted={muted}
+          onToggleMute={handleToggleMute}
+          onUnpairTv={handleUnpairTv}
+          controlsVisible={posterControlsVisible}
+          onRevealControls={revealPosterControls}
+        />
+      );
+    }
     const key =
       fixtureMode === '1' || fixtureMode === 'true' || fixtureMode === 'poster'
         ? 'doubles'
@@ -1051,356 +996,24 @@ export default function ScreenView() {
   }
 
   // ===========================================================================
-  // VIEW 3: ACTIVE MATCH — 3-CARD SIDE-OUT SCOREBOARD (rendered behind poster during fade)
-  // Pattern: [Serving Team Score] : [Receiving Team Score] : [Server #]
+  // VIEW 3: ACTIVE MATCH — PROJECTED ROLE-BASED SCOREBOARD (rendered behind poster during fade)
+  // Cards placed by ROLE: LEFT = Serving, RIGHT = Receiving
   // ===========================================================================
   const renderScoreboard = () => {
     if (!isMatchStarted || !activeSession) return null;
 
-    const tNames = activeSession.team_names || ['Team A', 'Team B'];
-    const pNames = activeSession.player_names || {};
-    const slots = pNames.slots || {};
+    const projectedProps = buildProjectedViewProps(activeSession, pairedCourt);
 
-  const getTeamRosterLabel = (teamIndex) => {
-    const key = teamIndex === 0 ? 'team0' : 'team1';
-    const slotArr = Array.isArray(slots[key]) ? slots[key] : [];
-    const namesFromSlots = slotArr
-      .map((s) => s?.name?.trim())
-      .filter(Boolean);
-    if (namesFromSlots.length > 0) return namesFromSlots.join(' & ');
-
-    const flatArr = Array.isArray(pNames[key]) ? pNames[key] : [];
-    const namesFromFlat = flatArr.map((n) => n?.trim()).filter(Boolean);
-    return namesFromFlat.length > 0 ? namesFromFlat.join(' & ') : '';
-  };
-
-  // Left card is ALWAYS the currently Serving Team
-  const servingTeamName =
-    tNames[servingTeamIdx] || (servingTeamIdx === 0 ? 'Team A' : 'Team B');
-  const servingRoster = getTeamRosterLabel(servingTeamIdx);
-  const servingScore = servingTeamIdx === 0 ? scoreTeam0 : scoreTeam1;
-  const servingPadded = String(servingScore).padStart(2, '0');
-
-  // Center card is ALWAYS the currently Receiving Team
-  const receivingTeamName =
-    tNames[receivingTeamIdx] || (receivingTeamIdx === 0 ? 'Team A' : 'Team B');
-  const receivingRoster = getTeamRosterLabel(receivingTeamIdx);
-  const receivingScore = receivingTeamIdx === 0 ? scoreTeam0 : scoreTeam1;
-  const receivingPadded = String(receivingScore).padStart(2, '0');
-
-  // Countdown Timer Calculation
-  let timerText = '30:00';
-  let isTimerExpired = activeSession.timer_status === 'expired';
-  if (activeSession.timer_status === 'running' && activeSession.timer_ends_at) {
-    const remMs = Math.max(
-      0,
-      new Date(activeSession.timer_ends_at).getTime() - Date.now()
-    );
-    timerText = formatMmSs(Math.ceil(remMs / 1000));
-    if (remMs === 0) isTimerExpired = true;
-  } else if (typeof activeSession.timer_remaining_ms === 'number') {
-    timerText = formatMmSs(Math.ceil(activeSession.timer_remaining_ms / 1000));
-    if (activeSession.timer_remaining_ms <= 0 && activeSession.timer_status !== 'idle') {
-      isTimerExpired = true;
-    }
-  }
-
-  // Match Win / Draw Detection
-  const targetScore = activeSession.target_score || 11;
-  const winBy = activeSession.win_by || 2;
-  const team0Won = scoreTeam0 >= targetScore && scoreTeam0 - scoreTeam1 >= winBy;
-  const team1Won = scoreTeam1 >= targetScore && scoreTeam1 - scoreTeam0 >= winBy;
-  const isGameOver = Boolean(
-    team0Won || team1Won || isTimerExpired || activeSession.initial_state?.gameOver
-  );
-
-  let winnerBannerText = '';
-  if (team0Won) {
-    winnerBannerText = `🏆 ${tNames[0] || 'Team A'} Wins the Match (${scoreTeam0} – ${scoreTeam1})!`;
-  } else if (team1Won) {
-    winnerBannerText = `🏆 ${tNames[1] || 'Team B'} Wins the Match (${scoreTeam1} – ${scoreTeam0})!`;
-  } else if (isTimerExpired) {
-    if (scoreTeam0 > scoreTeam1) {
-      winnerBannerText = `⏰ Time Expired · ${tNames[0] || 'Team A'} Wins (${scoreTeam0} – ${scoreTeam1})!`;
-    } else if (scoreTeam1 > scoreTeam0) {
-      winnerBannerText = `⏰ Time Expired · ${tNames[1] || 'Team B'} Wins (${scoreTeam1} – ${scoreTeam0})!`;
-    } else {
-      winnerBannerText = `⏰ Time Expired · Match Ended in a Draw (${scoreTeam0} – ${scoreTeam1})!`;
-    }
-  }
-
-  return (
-    <div className="relative min-h-screen overflow-hidden bg-[#021024] text-[#FFFFFF] flex flex-col justify-between select-none font-sans">
-      <AmbientCourtMotif variant="glow" />
-
-      {/* 1. Minimal Broadcast Top Header */}
-      <header className="relative z-10 h-[72px] px-6 sm:px-10 bg-[#021024] border-b border-[#11263C] flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <PikolScoreLogo size="md" />
-          <span className="ml-1 rounded-full bg-[#00E5B8] px-3.5 py-1 text-xs sm:text-sm font-extrabold uppercase tracking-wider text-[#031B28]">
-            Court {pairedCourt}
-          </span>
-          {pNames.umpireName && (
-            <span className="hidden md:inline-flex items-center gap-1.5 rounded-full bg-[#07192B] px-3 py-1 text-xs font-semibold text-[#B0C4D8] border border-[#24425E]">
-              <Shield size={13} className="text-[#00E5B8]" />
-              <span>Umpire: {pNames.umpireName}</span>
-            </span>
-          )}
-        </div>
-
-        <div className="flex items-center gap-2.5">
-          <span className="hidden sm:inline-flex items-center gap-1.5 mr-1 text-[11px] font-bold uppercase tracking-[0.08em] text-[#FFFFFF]">
-            <span className="h-1.5 w-1.5 rounded-full bg-[#00E5B8]" />
-            <span>Live Sync</span>
-          </span>
-          <button
-            type="button"
-            onClick={handleToggleMute}
-            className="flex items-center gap-1.5 px-3.5 py-2 rounded-[10px] bg-[#07192B] border border-[#24425E] text-xs font-semibold text-[#FFFFFF] hover:border-[#00E5B8] transition-colors cursor-pointer"
-          >
-            {muted ? (
-              <VolumeX size={15} className="text-[#F4A261]" />
-            ) : (
-              <Volume2 size={15} className="text-[#00E5B8]" />
-            )}
-            <span>{muted ? 'Muted' : 'Sound On'}</span>
-          </button>
-          <button
-            type="button"
-            onClick={handleUnpairTv}
-            className="flex items-center gap-1.5 px-3.5 py-2 rounded-[10px] bg-[#07192B] border border-[#24425E] text-xs font-semibold text-[#B0C4D8] hover:text-[#F47067] hover:border-[#F47067]/50 transition-colors cursor-pointer"
-            title="Unpair TV or switch court"
-          >
-            <Unlink size={14} />
-            <span className="hidden sm:inline">Unpair TV</span>
-          </button>
-        </div>
-      </header>
-
-      {/* 2. Centerpiece 3-Card Live Scoreboard */}
-      <main className="relative z-10 flex-1 flex flex-col items-center justify-center p-4 sm:p-8 max-w-7xl mx-auto w-full gap-5">
-        {/* Top Row: Match Countdown Timer + Side-Out / Victory Status Pill */}
-        <div className="flex flex-wrap items-center justify-center gap-3">
-          <div
-            className={`flex items-center gap-3 px-6 py-2.5 rounded-[14px] border shadow-md bg-[#0B2239] ${
-              isTimerExpired
-                ? 'dv-top-accent-error border-[#F47067]/50 text-[#F47067]'
-                : activeSession.timer_status === 'paused'
-                ? 'border-[#F4A261]/50 text-[#F4A261]'
-                : 'dv-top-accent border-[#24425E] text-[#FFFFFF]'
-            }`}
-          >
-            <Timer
-              size={20}
-              className={
-                isTimerExpired
-                  ? 'text-[#F47067]'
-                  : activeSession.timer_status === 'paused'
-                  ? 'text-[#F4A261]'
-                  : 'text-[#00E5B8]'
-              }
-            />
-            <span className="font-display text-3xl sm:text-4xl font-extrabold tracking-tight tabular-nums leading-none">
-              {timerText}
-            </span>
-            <span className="text-[11px] font-bold uppercase tracking-[0.12em] text-[#B0C4D8] ml-1">
-              {isTimerExpired
-                ? 'Time Expired'
-                : activeSession.timer_status === 'paused'
-                ? 'Timer Paused'
-                : 'Match Countdown'}
-            </span>
-          </div>
-
-          {sideOutNotice && !isGameOver && (
-            <div
-              role="status"
-              aria-live="polite"
-              className="flex items-center gap-2 px-5 py-2.5 rounded-full bg-[#00E5B8] text-[#031B28] text-sm font-extrabold uppercase tracking-wider shadow-lg animate-in fade-in zoom-in-95"
-            >
-              <ArrowLeftRight size={16} />
-              <span>{sideOutNotice}</span>
-            </div>
-          )}
-        </div>
-
-        {/* Victory / Match Over Banner */}
-        {isGameOver && winnerBannerText && (
-          <div
-            role="status"
-            aria-live="assertive"
-            className="w-full rounded-[20px] bg-[#0B2239] text-[#FFFFFF] px-6 py-4 border border-[#00E5B8]/60 dv-top-accent shadow-lg flex items-center justify-center gap-3 text-center"
-          >
-            <Trophy size={24} className="shrink-0 text-[#C5E832]" />
-            <span className="font-display font-extrabold italic uppercase text-2xl sm:text-3xl tracking-wide">
-              {winnerBannerText}
-            </span>
-          </div>
-        )}
-
-        {/* 3-CARD DYNAMIC SIDE-OUT ROW: [Serving Team Score] : [Receiving Team Score] : [Server Number] */}
-        <div className="grid grid-cols-1 md:grid-cols-[1fr_1fr_240px] gap-4 sm:gap-6 w-full items-stretch">
-          {/* CARD 1 (LEFT): ALWAYS THE CURRENTLY SERVING TEAM */}
-          <div
-            ref={servingCardRef}
-            className="rounded-[20px] p-6 sm:p-7 flex flex-col justify-between bg-[#0B2239] border border-[#24425E] dv-top-accent shadow-xl transition-colors"
-          >
-            <div className="flex items-start justify-between gap-3 mb-4">
-              <div className="min-w-0">
-                <div className="flex items-center gap-2">
-                  <span className="font-display font-extrabold italic uppercase text-2xl sm:text-3xl text-[#FFFFFF] tracking-wide truncate">
-                    {servingTeamName}
-                  </span>
-                </div>
-                {servingRoster && (
-                  <div className="flex items-center gap-1.5 text-xs sm:text-sm font-semibold text-[#B0C4D8] mt-1 truncate">
-                    <Users size={14} className="text-[#00E5B8] shrink-0" />
-                    <span className="truncate">{servingRoster}</span>
-                  </div>
-                )}
-              </div>
-
-              <span className="shrink-0 text-[11px] font-extrabold uppercase tracking-[0.12em] px-3.5 py-1.5 rounded-full bg-[#00E5B8] text-[#031B28] shadow-sm">
-                Serving
-              </span>
-            </div>
-
-            {/* Serving Team Score Digits */}
-            <div className="flex gap-3 justify-center items-center py-2 h-44 sm:h-52 [--tile-bg:#07192B] [--digit-color:#FFFFFF] [&_.ps-fd[data-dimmed=true]_.ps-h_span]:!opacity-100 [&_.ps-fd[data-dimmed=true]_.ps-h_span]:!text-[#6C87A3]">
-              <FlipDigit value={servingPadded[0]} dimmed={servingPadded[0] === '0'} />
-              <FlipDigit value={servingPadded[1]} />
-            </div>
-
-            <div className="mt-4 text-center text-[11px] font-bold uppercase tracking-[0.14em] text-[#00E5B8]">
-              Serving Score (1st Call)
-            </div>
-          </div>
-
-          {/* CARD 2 (CENTER): ALWAYS THE CURRENTLY RECEIVING TEAM */}
-          <div
-            ref={receivingCardRef}
-            className="rounded-[20px] p-6 sm:p-7 flex flex-col justify-between bg-[#07192B] border border-[#24425E] shadow-lg transition-colors"
-          >
-            <div className="flex items-start justify-between gap-3 mb-4">
-              <div className="min-w-0">
-                <div className="flex items-center gap-2">
-                  <span className="font-display font-extrabold italic uppercase text-2xl sm:text-3xl text-[#B0C4D8] tracking-wide truncate">
-                    {receivingTeamName}
-                  </span>
-                </div>
-                {receivingRoster && (
-                  <div className="flex items-center gap-1.5 text-xs sm:text-sm font-semibold text-[#6C87A3] mt-1 truncate">
-                    <Users size={14} className="text-[#6C87A3] shrink-0" />
-                    <span className="truncate">{receivingRoster}</span>
-                  </div>
-                )}
-              </div>
-
-              <span className="shrink-0 text-[11px] font-extrabold uppercase tracking-[0.12em] px-3.5 py-1.5 rounded-full bg-[#021024] border border-[#11263C] text-[#B0C4D8]">
-                Receiving
-              </span>
-            </div>
-
-            {/* Receiving Team Score Digits */}
-            <div className="flex gap-3 justify-center items-center py-2 h-44 sm:h-52 [--tile-bg:#021024] [--digit-color:#B0C4D8] [&_.ps-fd[data-dimmed=true]_.ps-h_span]:!opacity-100 [&_.ps-fd[data-dimmed=true]_.ps-h_span]:!text-[#3D5670]">
-              <FlipDigit value={receivingPadded[0]} dimmed={receivingPadded[0] === '0'} />
-              <FlipDigit value={receivingPadded[1]} />
-            </div>
-
-            <div className="mt-4 text-center text-[11px] font-bold uppercase tracking-[0.14em] text-[#6C87A3]">
-              Receiving Score (2nd Call)
-            </div>
-          </div>
-
-          {/* CARD 3 (RIGHT): SERVER NUMBER */}
-          <div className="rounded-[20px] p-6 bg-[#0B2239] border border-[#24425E] dv-top-accent text-[#FFFFFF] flex flex-col justify-between items-center shadow-xl">
-            <span className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#00E5B8]">
-              Server
-            </span>
-
-            <div className="py-2 flex items-center justify-center">
-              <FlipDigit value={serverNum} className="ps-fd-sm" />
-            </div>
-
-            <span className="text-xs font-extrabold text-[#FFFFFF] text-center uppercase tracking-[0.12em]">
-              Server #{serverNum}
-            </span>
-          </div>
-        </div>
-
-        {/* Bottom Official Callout Bar */}
-        <div className="mt-1 px-6 py-2.5 rounded-full bg-[#07192B] border border-[#24425E] shadow-sm flex items-center gap-3 text-sm font-semibold text-[#FFFFFF]">
-          <span className="uppercase tracking-[0.12em] text-[11px] font-bold text-[#6C87A3]">
-            Official Call:
-          </span>
-          <span className="font-display text-xl font-extrabold tracking-wide text-[#00E5B8] tabular-nums">
-            {servingScore} &ndash; {receivingScore} &ndash; {serverNum}
-          </span>
-          <span className="text-xs font-semibold text-[#B0C4D8]">
-            ({servingTeamName} Serving)
-          </span>
-        </div>
-      </main>
-
-      {/* 3. 5-Second "Abandon the match" Prompt Overlay */}
-      {abandonCountdown !== null && (
-        <div
-          role="alertdialog"
-          aria-modal="true"
-          aria-labelledby="tv-abandon-title"
-          className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-[#021024]/80 backdrop-blur-[12px] animate-in fade-in duration-200"
-        >
-          <div className="w-full max-w-xl rounded-[20px] bg-[#0B2239] border border-[#24425E] dv-top-accent-error p-8 sm:p-10 shadow-2xl text-center flex flex-col items-center">
-            <div className="flex h-16 w-16 items-center justify-center rounded-[16px] bg-[#F47067]/12 text-[#F47067] border border-[#F47067]/30 mb-5">
-              <AlertTriangle size={34} strokeWidth={2.2} aria-hidden="true" />
-            </div>
-
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-[#F47067]/12 border border-[#F47067]/30 px-4 py-1 text-[11px] font-extrabold uppercase tracking-[0.12em] text-[#F47067] mb-3">
-              Court {pairedCourt} &middot; Match Terminated
-            </span>
-
-            <h2
-              id="tv-abandon-title"
-              className="font-display font-extrabold italic uppercase text-4xl sm:text-5xl text-[#FFFFFF] tracking-tight m-0 mb-3"
-            >
-              Abandon the match
-            </h2>
-
-            <p className="text-sm sm:text-base text-[#B0C4D8] m-0 mb-6 max-w-md leading-relaxed">
-              The officiating umpire has abandoned this match. Returning to the pairing screen in{' '}
-              <strong className="text-[#F47067] font-extrabold">
-                {Math.max(0, abandonCountdown)} second
-                {abandonCountdown === 1 ? '' : 's'}
-              </strong>
-              ...
-            </p>
-
-            {/* Countdown Progress Bar */}
-            <div className="w-full max-w-sm h-2.5 rounded-full bg-[#07192B] border border-[#24425E] overflow-hidden mb-6">
-              <div
-                className="h-full bg-[#F47067] transition-all duration-1000 ease-linear rounded-full"
-                style={{
-                  width: `${Math.max(0, Math.min(100, (abandonCountdown / 5) * 100))}%`,
-                }}
-              />
-            </div>
-
-            <div className="flex items-center gap-3">
-              <div className="inline-flex items-center justify-center h-12 px-5 rounded-full bg-[#07192B] border border-[#24425E] text-[#F47067] font-display text-xl font-extrabold tabular-nums">
-                {Math.max(0, abandonCountdown)}s
-              </div>
-              <button
-                type="button"
-                onClick={handleUnpairTv}
-                className="h-12 px-6 rounded-[12px] bg-[#F47067] hover:bg-[#e55d54] text-[#031B28] text-sm font-bold transition-colors cursor-pointer"
-              >
-                Return to Pairing Now
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
+    return (
+      <ProjectedScoreboard
+        {...projectedProps}
+        muted={muted}
+        onToggleMute={handleToggleMute}
+        onUnpairTv={handleUnpairTv}
+        controlsVisible={posterControlsVisible}
+        onRevealControls={revealPosterControls}
+        abandonCountdown={abandonCountdown}
+      />
     );
   };
 
