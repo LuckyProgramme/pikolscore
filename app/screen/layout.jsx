@@ -1,6 +1,6 @@
 export const metadata = {
-  title: 'DinkVision | Courtside TV Screen View',
-  description: 'Live courtside TV scoreboard and pre-match lobby display for DinkVision PikolScore.',
+  title: 'PikolScore | Courtside TV Screen View',
+  description: 'Live courtside TV scoreboard and pre-match lobby display for PikolScore.',
 };
 
 export default function ScreenLayout({ children }) {

@@ -20,7 +20,7 @@ import {
   saveAccountForQuickSwitch,
   detachActiveSupabaseSession,
 } from '@/lib/auth-session';
-import DinkVisionLogo from '@/components/ui/DinkVisionLogo';
+import PikolScoreLogo from '@/components/ui/PikolScoreLogo';
 
 export function Header({
   onOpenLog,
@@ -192,7 +192,7 @@ export function Header({
     return (
       <header className="ps-header ps-scoreboard-header" {...rest}>
         <div className="ps-logo">
-          <DinkVisionLogo size="md" />
+          <PikolScoreLogo size="md" />
         </div>
 
         <div className="ps-header-right">
@@ -362,7 +362,7 @@ export function Header({
           </button>
         )}
         <div className="ps-logo">
-          <DinkVisionLogo size="md" />
+          <PikolScoreLogo size="md" />
         </div>
       </div>
 
@@ -477,7 +477,7 @@ export function Header({
         <button
           type="button"
           onClick={handleLogout}
-          title="Sign out of DinkVision"
+          title="Sign out of PikolScore"
           className="ps-pill ps-pill-logout"
           aria-label="Sign out"
         >

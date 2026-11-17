@@ -27,7 +27,7 @@ import {
 } from 'lucide-react';
 import QRCode from 'qrcode';
 import { supabase } from '@/config/supabase';
-import { DinkVisionLogo } from '@/components/ui/DinkVisionLogo';
+import { PikolScoreLogo } from '@/components/ui/PikolScoreLogo';
 import { AmbientCourtMotif } from '@/components/ui/AmbientCourtMotif';
 import FlipDigit from '@/components/scoreboard/FlipDigit';
 import StandbyPoster, {
@@ -875,7 +875,7 @@ export default function ScreenView() {
         {/* Top Broadcast Header */}
         <header className="relative z-10 h-[72px] px-6 sm:px-10 bg-[#021024]/90 backdrop-blur-md border-b border-[#11263C] flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <DinkVisionLogo size="md" />
+            <PikolScoreLogo size="md" />
             <span className="ml-1 rounded-full bg-[#07192B] px-3.5 py-1.5 text-[11px] font-bold uppercase tracking-[0.12em] text-[#00E5B8] border border-[#24425E] flex items-center gap-1.5">
               <Tv size={13} />
               <span>TV Screen View</span>
@@ -1041,7 +1041,7 @@ export default function ScreenView() {
         className="fixed inset-0 bg-[#021024] flex flex-col items-center justify-center gap-4 font-sans"
         aria-busy="true"
       >
-        <DinkVisionLogo size="lg" />
+        <PikolScoreLogo size="lg" />
         <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.12em] text-[#B0C4D8]">
           <span className="h-2 w-2 rounded-full bg-[#00E5B8] animate-ping" />
           <span>Syncing Court {pairedCourt}...</span>
@@ -1136,7 +1136,7 @@ export default function ScreenView() {
       {/* 1. Minimal Broadcast Top Header */}
       <header className="relative z-10 h-[72px] px-6 sm:px-10 bg-[#021024] border-b border-[#11263C] flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <DinkVisionLogo size="md" />
+          <PikolScoreLogo size="md" />
           <span className="ml-1 rounded-full bg-[#00E5B8] px-3.5 py-1 text-xs sm:text-sm font-extrabold uppercase tracking-wider text-[#031B28]">
             Court {pairedCourt}
           </span>

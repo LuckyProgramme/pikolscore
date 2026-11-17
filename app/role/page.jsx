@@ -15,6 +15,7 @@ import {
 import QRCode from 'qrcode';
 import { supabase } from '@/config/supabase';
 import AuthLoadingSplash from '@/components/auth/AuthLoadingSplash';
+import PikolScoreLogo from '@/components/ui/PikolScoreLogo';
 import {
   clearPreferredRole,
   getValidPreferredRole,
@@ -328,18 +329,7 @@ export default function RoleChooserPage() {
       <main className="w-full max-w-[1040px] rounded-[28px] sm:rounded-[36px] bg-ivory p-6 sm:p-10 border border-line shadow-2xl">
         {/* Brand Header */}
         <div className="flex items-center justify-between gap-3 mb-6">
-          <div className="flex items-center gap-3">
-            <svg width="40" height="40" viewBox="0 0 40 40" aria-hidden="true">
-              <rect width="40" height="40" rx="12" fill="#0F5C62" />
-              <circle cx="20" cy="20" r="10" fill="#FEECD6" />
-              <circle cx="16.5" cy="16.5" r="1.6" fill="#084B46" />
-              <circle cx="23.5" cy="19" r="1.6" fill="#084B46" />
-              <circle cx="19" cy="24" r="1.6" fill="#084B46" />
-            </svg>
-            <span className="text-[26px] font-bold tracking-[-0.01em] text-dark-teal">
-              PikolScore
-            </span>
-          </div>
+          <PikolScoreLogo size="md" />
           <span className="hidden sm:inline-flex items-center gap-1.5 rounded-full bg-pale-sage px-3 py-1 text-xs font-bold text-teal border border-teal/20">
             <Tv size={14} />
             <span>TV Auto-Projection Ready</span>

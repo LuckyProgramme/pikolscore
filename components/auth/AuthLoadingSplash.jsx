@@ -1,6 +1,6 @@
 'use client';
 
-import DinkVisionLogo from '@/components/ui/DinkVisionLogo';
+import PikolScoreLogo from '@/components/ui/PikolScoreLogo';
 import AmbientCourtMotif from '@/components/ui/AmbientCourtMotif';
 
 export function AuthLoadingSplash({ label = 'Checking courtside session...' }) {
@@ -14,7 +14,7 @@ export function AuthLoadingSplash({ label = 'Checking courtside session...' }) {
 
       <div className="relative z-10 flex flex-col items-center gap-4 px-6 text-center">
         <div className="rounded-2xl bg-[#0B2239] border border-[#24425E] px-6 py-4 dv-top-accent shadow-2xl">
-          <DinkVisionLogo size="lg" />
+          <PikolScoreLogo size="lg" />
         </div>
 
         <p className="text-[12px] font-bold uppercase tracking-[0.14em] text-[#00E5B8] mt-1">

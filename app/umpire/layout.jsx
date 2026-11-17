@@ -1,5 +1,5 @@
 export const metadata = {
-  title: 'Umpire Console | DinkVision PikolScore',
+  title: 'Umpire Console | PikolScore',
   description: 'Official Umpire authentication and court management',
 };
 

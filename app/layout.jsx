@@ -17,7 +17,7 @@ const plusJakartaSans = Plus_Jakarta_Sans({
 });
 
 export const metadata = {
-  title: 'DinkVision | Courtside Precision Scoreboard',
+  title: 'PikolScore | Courtside Precision Scoreboard',
   description: 'Athletic dark-mode pickleball match officiating console, court hub, and TV display',
 };
 

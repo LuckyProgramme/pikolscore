@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useId, useMemo, useRef, useCallback } from 'react';
-import { DinkVisionLogo } from '@/components/ui/DinkVisionLogo';
+import { PikolScoreLogo } from '@/components/ui/PikolScoreLogo';
 import { AmbientCourtMotif } from '@/components/ui/AmbientCourtMotif';
 import {
   splitPlayerName,
@@ -962,7 +962,7 @@ export default function StandbyPoster({
       />
 
       {/* 2. Top-left Wordmark */}
-      <DinkVisionLogo
+      <PikolScoreLogo
         size="lg"
         className="absolute left-[64px] top-[46px] z-10 scale-125 origin-top-left"
       />
