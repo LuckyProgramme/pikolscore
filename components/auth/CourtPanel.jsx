@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { Tv, QrCode, RefreshCw, Loader2 } from 'lucide-react';
+import { RefreshCw, Loader2 } from 'lucide-react';
 import QRCode from 'qrcode';
 import { supabase } from '@/config/supabase';
 import {
@@ -22,8 +22,8 @@ export function CourtPanel() {
   const router = useRouter();
   const [tvId, setTvId] = useState('');
   const [tvQrSvg, setTvQrSvg] = useState('');
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
-  // Navigate TV to /screen?court=<courtNumber> when umpire pairs this TV code
   const routeTvToCourt = useCallback(
     (courtNumber) => {
       const cNum = Number(courtNumber);
@@ -37,7 +37,6 @@ export function CourtPanel() {
     [router]
   );
 
-  // Initialize or load persistent TV pairing device ID
   useEffect(() => {
     if (typeof window === 'undefined') return;
     let storedTvId = normalizeTvId(window.localStorage.getItem(TV_ID_STORAGE_KEY));
@@ -48,7 +47,6 @@ export function CourtPanel() {
     setTvId(storedTvId);
   }, []);
 
-  // Generate QR Code SVG for the TV Pairing Panel
   const tvPairingUrl = useMemo(() => {
     if (typeof window === 'undefined' || !tvId) return '';
     return `${window.location.origin}/?tv=${encodeURIComponent(tvId)}`;
@@ -62,7 +60,7 @@ export function CourtPanel() {
       tvPairingUrl,
       {
         type: 'svg',
-        margin: 1,
+        margin: 0,
         color: {
           dark: '#084B46',
           light: '#FEFEFB',
@@ -71,6 +69,7 @@ export function CourtPanel() {
       (err, svg) => {
         if (!err && isMounted) {
           setTvQrSvg(svg);
+          setIsRefreshing(false);
         }
       }
     );
@@ -80,13 +79,10 @@ export function CourtPanel() {
     };
   }, [tvPairingUrl]);
 
-  // Listen in real-time on /umpire so scanning the QR code with an umpire phone auto-detects the court and projects it
   useEffect(() => {
     if (!tvId) return;
-
     let isMounted = true;
 
-    // 1. Check if this tvId was already paired to an active match_session
     async function checkExistingTvPairing() {
       try {
         const { data } = await supabase
@@ -115,7 +111,6 @@ export function CourtPanel() {
 
     checkExistingTvPairing();
 
-    // 2. Subscribe to Supabase Realtime broadcast channel `tv_pairing:<tvId>`
     const pairChannel = supabase
       .channel(`tv_pairing:${tvId}`)
       .on('broadcast', { event: 'paired' }, (msg) => {
@@ -126,7 +121,6 @@ export function CourtPanel() {
       })
       .subscribe();
 
-    // 3. Subscribe to postgres_changes on match_sessions as reliable DB fallback
     const dbChannel = supabase
       .channel(`umpire_tv_db_${tvId}`)
       .on(
@@ -157,6 +151,7 @@ export function CourtPanel() {
   }, [tvId, routeTvToCourt]);
 
   const handleRefreshTvCode = () => {
+    setIsRefreshing(true);
     const freshId = generateTvId();
     setTvId(freshId);
     if (typeof window !== 'undefined') {
@@ -168,71 +163,95 @@ export function CourtPanel() {
 
   return (
     <aside
-      className="relative hidden min-[900px]:flex flex-col justify-between items-center overflow-hidden bg-ivory px-10 py-10"
-      aria-label="Courtside TV Projection QR"
+      className="hidden lg:flex flex-col bg-[#203F39] p-10 text-[#FAF9F5] relative overflow-hidden"
+      aria-label="Courtside TV pairing"
     >
-      {/* Top Right Status Pill */}
-      <div className="w-full flex items-center justify-end">
-        <span className="inline-flex items-center gap-1.5 rounded-full bg-pale-sage px-3.5 py-1.5 text-xs font-bold text-teal border border-teal/20">
-          <Tv size={14} />
-          <span>TV Auto-Projection Ready</span>
-        </span>
-      </div>
+      {/* Faint court illustration away from text */}
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        viewBox="0 45 572 340"
+        aria-hidden="true"
+        className="pointer-events-none absolute -right-24 -top-10 w-[460px] max-w-none h-auto opacity-[0.08]"
+      >
+        <g>
+          <polygon points="15,238 262,58 540,203 290,383" fill="#c3d0c6" transform="translate(0, 12)" />
+          <polygon points="15,238 262,58 540,203 290,383" fill="#8A9B82" />
+          <polygon points="55,232 265,80 500,203 290,357" fill="#26705f" />
+          <polygon points="155,160 395,280 385,285 145,165" fill="#5a9985" />
+          <g stroke="#f1e8cf" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <polygon points="55,232 265,80 500,203 290,357" fill="none" />
+            <line x1="197" y1="129" x2="432" y2="253" />
+            <line x1="123" y1="183" x2="358" y2="307" />
+            <line x1="314.5" y1="191" x2="382.5" y2="141.5" />
+            <line x1="240.5" y1="245" x2="172.5" y2="294.5" />
+          </g>
+        </g>
+      </svg>
 
-      {/* Centered Courtside TV Screen Card */}
-      <div className="my-auto w-full max-w-[420px] rounded-3xl bg-[#084B46] text-[#FEFEFB] p-6 sm:p-8 border-2 border-[#0F5C62] flex flex-col justify-between items-center text-center shadow-lg">
-        <div className="w-full flex items-center justify-between">
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-[#0F5C62] px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-[#FEECD6] border border-[#FEECD6]/20">
-            <Tv size={13} />
-            <span>Courtside TV Screen</span>
-          </span>
+      {/* One vertically centered column: QR tile → gap-6 → code row → gap-8 → subheading → gap-5 → steps */}
+      <div className="relative z-10 flex h-full w-full flex-col items-center justify-center text-center">
+        {/* 2. Bigger QR code tile (w-full max-w-[280px] aspect-square rounded-3xl bg-[#FEFEFB] p-5) */}
+        <div
+          role="img"
+          aria-label="QR code to project to this screen"
+          className="w-full max-w-[280px] aspect-square rounded-3xl bg-[#FEFEFB] p-5 grid place-items-center"
+        >
+          {tvQrSvg && !isRefreshing ? (
+            <div
+              className="w-full h-full flex items-center justify-center [&>svg]:w-full [&>svg]:h-full [&>svg]:object-contain"
+              dangerouslySetInnerHTML={{ __html: tvQrSvg }}
+            />
+          ) : (
+            <Loader2 size={32} className="animate-spin text-[#0F5C62]" aria-hidden="true" />
+          )}
+        </div>
+
+        {/* 3. Stacked TV code chip + 48px Refresh icon button (gap-6 below QR tile) */}
+        <div className="mt-6 flex items-center gap-3 justify-center">
+          <div className="flex flex-col items-center gap-0.5 rounded-2xl bg-[#FAF9F5]/10 px-6 py-3">
+            <span className="text-sm font-medium text-[#EAF0E5]/80">TV code</span>
+            <span className="text-3xl font-semibold tracking-[0.18em] pl-[0.18em] text-[#FEFEFB] tabular-nums select-all whitespace-nowrap">
+              {isRefreshing ? '••••••' : shortTvCode || '------'}
+            </span>
+          </div>
+
           <button
             type="button"
             onClick={handleRefreshTvCode}
-            title="Generate a new TV pairing code"
-            className="inline-flex items-center gap-1 text-xs font-semibold text-[#EAF0E5]/80 hover:text-[#FEECD6] bg-transparent border-0 cursor-pointer"
+            disabled={isRefreshing}
+            aria-label="Refresh TV code"
+            title="Refresh TV code"
+            className="size-12 shrink-0 rounded-full bg-[#FAF9F5]/10 text-[#FAF9F5] hover:bg-[#FAF9F5]/20 border-0 grid place-items-center cursor-pointer transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FAF9F5]/60"
           >
-            <RefreshCw size={13} />
-            <span>Refresh</span>
+            <RefreshCw
+              size={20}
+              className={isRefreshing ? 'animate-spin' : ''}
+              aria-hidden="true"
+            />
           </button>
         </div>
 
-        <div className="my-5 flex flex-col items-center">
-          <div className="bg-white p-3.5 rounded-2xl border-2 border-[#FEECD6]/30 shadow-md">
-            {tvQrSvg ? (
-              <div
-                className="w-48 h-48 sm:w-52 sm:h-52 flex items-center justify-center [&>svg]:w-full [&>svg]:h-full"
-                dangerouslySetInnerHTML={{ __html: tvQrSvg }}
-              />
-            ) : (
-              <div className="w-48 h-48 sm:w-52 sm:h-52 flex items-center justify-center">
-                <Loader2 size={28} className="animate-spin text-[#0F5C62]" />
-              </div>
-            )}
-          </div>
+        {/* 4. Subheading (gap-8 below code row) */}
+        <h2 className="mt-8 text-2xl xl:text-3xl font-semibold leading-tight text-[#FAF9F5] text-center text-balance">
+          Scan to connect your device
+        </h2>
 
-          <div className="mt-3.5 inline-flex items-center gap-2 rounded-xl bg-[#0F5C62] px-3.5 py-1.5 border border-[#FEECD6]/20">
-            <QrCode size={14} className="text-[#FEECD6]" />
-            <span className="text-[11px] uppercase font-bold tracking-wider text-[#EAF0E5]">
-              TV Code:
+        {/* 5. Steps (gap-5 below subheading, left-aligned inside w-fit mx-auto) */}
+        <ol className="mt-5 p-0 list-none flex flex-col gap-3 w-fit mx-auto text-left">
+          <li className="flex items-center gap-3 text-base xl:text-lg text-[#FAF9F5]">
+            <span className="size-8 shrink-0 text-base font-semibold rounded-full bg-[#FAF9F5]/10 text-[#FAF9F5] grid place-items-center">
+              1
             </span>
-            <span className="font-mono text-sm font-black tracking-widest text-[#FEECD6]">
-              {shortTvCode || '------'}
+            <span>Claim an available court</span>
+          </li>
+          <li className="flex items-center gap-3 text-base xl:text-lg text-[#FAF9F5]">
+            <span className="size-8 shrink-0 text-base font-semibold rounded-full bg-[#FAF9F5]/10 text-[#FAF9F5] grid place-items-center">
+              2
             </span>
-          </div>
-        </div>
-
-        <div>
-          <h2 className="text-lg font-extrabold text-white m-0 mb-1">
-            Scan with Umpire Phone to Project
-          </h2>
-          <p className="text-xs text-[#EAF0E5]/85 m-0 leading-relaxed">
-            Umpires can tap <strong>&ldquo;Project to Screen&rdquo;</strong> on their court or scan this QR code to automatically project their court&apos;s lobby and live scoreboard here.
-          </p>
-        </div>
+            <span>Scan the QR or enter the TV code to project</span>
+          </li>
+        </ol>
       </div>
-
-      <div className="h-4" aria-hidden="true" />
     </aside>
   );
 }

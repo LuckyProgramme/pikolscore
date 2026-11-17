@@ -10,6 +10,7 @@
     "test": "node test-rules.js && node test-sync.js && node test-voice.js"
   },
   "dependencies": {
+    "@imgly/background-removal": "^1.7.0",
     "@supabase/supabase-js": "^2.117.3",
     "jsqr": "^1.4.0",
     "lucide-react": "^1.52.0",
